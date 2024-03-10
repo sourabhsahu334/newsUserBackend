@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+// const mongoose = require('mongoose');
 require('dotenv').config();
-mongoose.Promise = global.Promise;
+// mongoose.Promise = global.Promise;
 const db = process.env.DATABASE_URL
 const local="mongodb://127.0.0.1:27017/AssignmentZedblock";
 const { MongoClient } = require('mongodb');
