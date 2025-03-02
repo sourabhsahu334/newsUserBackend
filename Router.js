@@ -15,7 +15,7 @@ router.get('/normalNews', async(req, res) => {
     const db = client.db("NewsList");
     const collection = db.collection("Student");
     const documents = await collection.find().toArray();
-    res.json({res:documents})
+    res.json({res:documents[0]?.object})
 });
 
 router.get('/getCollectionData', async(req, res) => {
@@ -32,25 +32,25 @@ router.get('/categoryList', async (req, res) => {
 
   // Get a list of all collection names
   const collections = await db.listCollections().toArray();
-  const collectionNames = collections.map(collection => collection.name);
-
+  let collectionNames = collections.map(collection => collection.name);
+  collectionNames= collectionNames?.filter((item)=>item!=='Dataset')
+  collectionNames= collectionNames?.filter((item)=>item!=='Student')
   res.json({ collections: collectionNames });
+  console.log("done");
 });
 
 router.get('/about', async(req, res) => {
-  const url = `https://www.youtube.com/results?search_query=sex`
+const url = `https://www.youtube.com/results?search_query=${req.query.topic}`
   const html= await axios.get(url);
   const $=cheerio.load(html.data);
   const plainText = $.root().text();
   let currentIndex = plainText.indexOf('/shorts')
   const searchString = '/shorts';
   const substringLength = 10;
-
   const resultArray = [];  while (currentIndex !== -1) {
     // const start = Math.max(0, currentIndex - substringLength);
     const substring = plainText.substring(currentIndex, currentIndex+20);
-    resultArray.push(substring);
-    
+    resultArray.push(substring); 
     // Move to the next occurrence of the search string
     currentIndex = plainText.indexOf(searchString, currentIndex + 1);
   }
