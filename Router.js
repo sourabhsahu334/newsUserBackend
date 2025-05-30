@@ -14,7 +14,7 @@ const url = 'https://www.youtube.com/results?search_query=mppsc'; // Replace wit
 router.get('/normalNews', async(req, res) => {
     const db = client.db("NewsList");
     const collection = db.collection("Student");
-    const documents = await collection.find().toArray();
+    const documents = await collection.find().limit(15);
     res.json({res:documents[0]?.object})
 });
 
@@ -22,8 +22,14 @@ router.get('/getCollectionData', async(req, res) => {
   const {collectionName}= req.query;
   const db = client.db("NewsList");
   const collection = db.collection(collectionName);
-  const documents = await collection.find().toArray();
-  res.json({res:documents})
+const latestDoc = await collection
+      .find()
+      .sort({ _id: -1 }) // Sort by _id descending
+      .limit(1)
+      .toArray();
+
+    res.json({ res: latestDoc });
+
 });
 
 
