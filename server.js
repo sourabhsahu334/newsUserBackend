@@ -1,9 +1,15 @@
-// index.js
-
 const express = require('express');
+const cors = require('cors');
 const routes = require("./Router"); // Import the router module
-require('./db/connect')
+require('./db/connect');
+
 const app = express();
+
+// Enable CORS for all origins
+app.use(cors());
+
+// Middleware to parse JSON bodies
+app.use(express.json());
 
 // Use the router for the specified routes
 app.use('/st', routes);
