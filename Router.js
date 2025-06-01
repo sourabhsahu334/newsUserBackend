@@ -36,9 +36,9 @@ router.get('/astrolings', async(req, res) => {
   // const {collectionName}= req.query;
   const db = client.db("NewsList");
   const collection = db.collection("Astro");
-const latestDoc = await collection.find()
+    const latestDocs = await collection.find().toArray();
 
-    res.json({ res: latestDoc });
+    res.json({ res: latestDocs });
 
 });
 
