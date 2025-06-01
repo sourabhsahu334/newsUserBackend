@@ -32,6 +32,17 @@ const latestDoc = await collection
 
 });
 
+router.get('/astrolings', async(req, res) => {
+  // const {collectionName}= req.query;
+  const db = client.db("NewsList");
+  const collection = db.collection("Astro");
+const latestDoc = await collection.find()
+
+    res.json({ res: latestDoc });
+
+});
+
+
 
 router.get('/categoryList', async (req, res) => {
   const db = client.db("NewsList");
