@@ -14,7 +14,7 @@ app.use(express.json());
 // Use the router for the specified routes
 app.use('/st', routes);
 app.get('/', (req, res) => {
-  res.send('Welcome to the Express API!');
+  res.send('Welcome to the Express API! webhook updated');
 });
 
 
