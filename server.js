@@ -13,8 +13,12 @@ app.use(express.json());
 
 // Use the router for the specified routes
 app.use('/st', routes);
+app.get('/', (req, res) => {
+  res.send('Welcome to the Express API!');
+});
+
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0',() => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
