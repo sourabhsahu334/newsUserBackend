@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
 const routes = require("./Router"); // Import the router module
 require('./db/connect');
 
@@ -10,6 +11,9 @@ app.use(cors());
 
 // Middleware to parse JSON bodies
 app.use(express.json());
+
+// Configure multer for file uploads
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Use the router for the specified routes
 app.use('/st', routes);
