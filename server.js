@@ -1,8 +1,8 @@
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const routes = require("./Router"); // Import the router module
-require('./db/connect');
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import routes from "./Router.js"; // Import the router module
+import './db/connect.js';
 
 const app = express();
 

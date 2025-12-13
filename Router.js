@@ -8,7 +8,6 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const multer = require('multer');
 const { PdfReader } = require("pdfreader");
-const url = 'https://www.youtube.com/results?search_query=mppsc'; // Replace with the URL you want to scrape
 
 // Configure multer for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -23,7 +22,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Initialize with the correct class for API Keys
 // Ideally, put the key in process.env.GEMINI_API_KEY
-const genAI = new GoogleGenerativeAI("AIzaSyAPCvBNMb609kKlKxAFW39mZ3YMt3HDHTc"); 
+const genAI = new GoogleGenerativeAI(process.env.API_KEY); 
 
 router.post('/pdf-to-text', upload.array('pdfs', 10), async (req, res) => {
   try {
@@ -69,7 +68,7 @@ router.post('/pdf-to-text', upload.array('pdfs', 10), async (req, res) => {
             - current_company
             - skillssets (array of strings)
             - collegename
-            - introduction
+            - total_experience_months: array of objects with { company: string, months: number }
 
             If a field is not found, use null.
             
