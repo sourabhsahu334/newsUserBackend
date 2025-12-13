@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { client } = require('./db/connect');
-const { youtube } = require('scrape-youtube');
+// const { youtube } = require('scrape-youtube');
 const router = express.Router();
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -15,6 +15,54 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 
 // 1. Setup - Paste your API key here (Keep this secret!)
+function normalizeExperience(experienceArray) {
+  if (!Array.isArray(experienceArray)) return [];
+
+  const parseDate = (dateStr) => {
+    if (!dateStr) return null;
+
+    if (typeof dateStr === "string" && dateStr.toLowerCase() === "present") {
+      return new Date();
+    }
+
+    const clean = dateStr.trim();
+
+    // MM/YYYY
+    if (/^\d{2}\/\d{4}$/.test(clean)) {
+      const [m, y] = clean.split("/").map(Number);
+      return new Date(y, m - 1);
+    }
+
+    // Month YYYY / Mon YYYY (June 2024, Nov 2023)
+    const parsed = Date.parse(clean);
+    if (!isNaN(parsed)) {
+      return new Date(parsed);
+    }
+
+    return null;
+  };
+
+  return experienceArray.map(exp => {
+    const startDate = parseDate(exp.start_date);
+    const endDate = parseDate(exp.end_date);
+
+    let months = null;
+    if (startDate && endDate) {
+      months =
+        (endDate.getFullYear() - startDate.getFullYear()) * 12 +
+        (endDate.getMonth() - startDate.getMonth());
+
+      if (months < 0) months = 0;
+    }
+
+    return {
+      company: exp.company,
+      start_date: exp.start_date ?? null,
+      end_date: exp.end_date ?? null,
+      months
+    };
+  });
+}
 
 // Change this import
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -26,87 +74,77 @@ const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
 router.post('/pdf-to-text', upload.array('pdfs', 10), async (req, res) => {
   try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'No PDF files uploaded' });
-    }
+    const model = genAI.getGenerativeModel({
+model: "gemini-2.0-flash",
+generationConfig: {
+        responseMimeType: "application/json"
+      }
+    });
 
     const results = [];
-    
-    // Initialize the model instance here
-    const model = genAI.getGenerativeModel({ 
-        model: "gemini-2.0-flash-lite-001",
-        // CRITICAL: This forces the model to return actual JSON, preventing parsing errors
-        generationConfig: { responseMimeType: "application/json" } 
-    });
 
     for (const file of req.files) {
       try {
-        // --- 1. Validation ---
-        if (!file.originalname.toLowerCase().endsWith('.pdf')) {
-          results.push({ filename: file.originalname, error: 'File is not a PDF' });
-          continue;
-        }
+const prompt = `
+Extract the following details from this resume PDF into a JSON object:
 
-        // --- 2. Extract Text ---
-        const textChunks = [];
-        await new Promise((resolve, reject) => {
-          new PdfReader().parseBuffer(file.buffer, (err, item) => {
-            if (err) return reject(err);
-            if (!item) return resolve();
-            if (item.text) textChunks.push(item.text);
-          });
-        });
+- name
+- current_company
+- skillsets (array of strings)
+- collegename
+- experience: array of objects with:
+    - company (string)
+    - start_date (string in MM/YYYY format)
+    - end_date (string in MM/YYYY format OR "Present")
 
-        const rawText = textChunks.join(" ");
+STRICT RULES:
+- Extract dates EXACTLY as written in the resume.
+- Do NOT calculate months or years.
+- If end date is "Present", return "Present" exactly.
+- If a date is missing, use null.
+- Do NOT guess or infer dates.
 
-        // --- 3. AI Extraction ---
-        if (rawText.trim().length > 0) {
-            
-          const prompt = `
-            Extract the following details from the resume below into a JSON object:
-            - name
-            - current_company
-            - skillssets (array of strings)
-            - collegename
-            - total_experience_months: array of objects with { company: string, months: number }
+Return ONLY valid JSON.
+`;
 
-            If a field is not found, use null.
-            
-            RESUME TEXT:
-            ${rawText}
-          `;
-          // Generate content
-          const result = await model.generateContent(prompt);
-          const response = await result.response;
-          const aiText = response.text();
 
-          let parsedJSON;
-          try {
-            parsedJSON = JSON.parse(aiText);
-          } catch (e) {
-            parsedJSON = { error: "AI JSON parsing failed", raw: aiText };
+
+
+        const result = await model.generateContent([
+          { text: prompt },
+          {
+            inlineData: {
+              mimeType: "application/pdf",
+              data: file.buffer.toString("base64")
+            }
           }
+        ]);
 
-          results.push({
-            filename: file.originalname,
-            parsed_data: parsedJSON
-          });
-        }
+        const aiText = result.response.text();
+        const parsed = JSON.parse(aiText);
+        console.log("Prompt tokens:", result.response.usageMetadata.promptTokenCount);
+console.log("Response tokens:", result.response.usageMetadata.candidatesTokenCount);
+console.log("Total tokens:", result.response.usageMetadata.totalTokenCount);
 
-      } catch (error) {
-        console.error(`Error processing ${file.originalname}:`, error);
+parsed.experience = normalizeExperience(parsed.experience);
+
         results.push({
           filename: file.originalname,
-          error: `Processing failed: ${error.message}`
+          parsed_data: parsed
+        });
+
+      } catch (err) {
+        results.push({
+          filename: file.originalname,
+          error: err.message
         });
       }
     }
 
     res.json({ success: true, results });
 
-  } catch (error) {
-    console.error('Batch processing error:', error);
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 // Define routes for the router
