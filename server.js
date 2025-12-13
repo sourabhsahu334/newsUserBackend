@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import routes from "./Router.js"; // Import the router module
+import googleroutes from "./es.js";
 import './db/connect.js';
 
 const app = express();
@@ -17,6 +18,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Use the router for the specified routes
 app.use('/st', routes);
+app.use('/google', googleroutes);
 app.get('/', (req, res) => {
   res.send('Welcome to the Express API! webhook updated33');
 });
