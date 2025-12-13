@@ -75,7 +75,6 @@ router.post('/pdf-to-text', upload.array('pdfs', 10), async (req, res) => {
             RESUME TEXT:
             ${rawText}
           `;
-
           // Generate content
           const result = await model.generateContent(prompt);
           const response = await result.response;
