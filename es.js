@@ -5,6 +5,7 @@ var jwt = require('jsonwebtoken');
 
 var dbConnect = require('./db/connect.js');
 var appConfig = require('./config.js');
+var authMiddleware = require('./middleware/authMiddleware.js');
 
 var router = express.Router();
 
@@ -115,10 +116,10 @@ router.get(
   passport.authenticate('google', {
     scope: [
       'profile',
-      'email',
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/gmail.send',
-      'https://www.googleapis.com/auth/calendar'
+      'email'
+      // 'https://www.googleapis.com/auth/gmail.readonly',
+      // 'https://www.googleapis.com/auth/gmail.send',
+      // 'https://www.googleapis.com/auth/calendar'
     ],
     accessType: 'offline',
     prompt: 'consent'
@@ -144,8 +145,7 @@ router.get('/logout', function(req, res) {
   res.redirect('/');
 });
 
-router.get('/me', function(req, res) {
-  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+router.get('/me', authMiddleware.verifyToken, authMiddleware.getUserFromDB, function(req, res) {
   res.json(req.user);
 });
 

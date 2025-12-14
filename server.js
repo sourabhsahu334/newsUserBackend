@@ -18,7 +18,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Use the router for the specified routes
 app.use('/st', routes);
-app.use('/google', googleroutes);
+app.use('/auth', googleroutes);
 app.get('/', (req, res) => {
   res.send('Welcome to the Express API! webhook updated33');
 });
