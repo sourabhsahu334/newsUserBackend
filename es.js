@@ -14,7 +14,7 @@ var router = express.Router();
 ================================ */
 var GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 var GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-var GOOGLE_CALLBACK_URL = 'https://www.neukaps.com/auth/google/callback';
+var GOOGLE_CALLBACK_URL = 'http://16.170.234.214/auth/google/callback';
 var GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 var JWT_SECRET = appConfig.JWT_SECRET;
 var FRONTEND_URL = appConfig.FRONTEND_URL;
