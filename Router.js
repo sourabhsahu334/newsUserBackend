@@ -8,6 +8,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const multer = require('multer');
 const { PdfReader } = require("pdfreader");
+const authMiddleware = require('./middleware/authMiddleware');
 
 // Configure multer for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -72,8 +73,31 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 // Ideally, put the key in process.env.GEMINI_API_KEY
 const genAI = new GoogleGenerativeAI(process.env.API_KEY); 
 
-router.post('/pdf-to-text', upload.array('pdfs', 10), async (req, res) => {
+router.post( '/pdf-to-text',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  upload.array('pdfs', 10), async (req, res) => {
   try {
+
+     const pdfCount = req.files.length;
+
+      if (req.user.credits < pdfCount) {
+        return res.status(402).json({
+          success: false,
+          message: `Not enough credits`
+        });
+      }
+
+      // 🔥 Deduct credits first
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
+
+      await usersCollection.updateOne(
+        { _id: req.user._id },
+        { $inc: { credits: -pdfCount } }
+      );
+
+      
     const model = genAI.getGenerativeModel({
 model: "gemini-2.0-flash",
 generationConfig: {

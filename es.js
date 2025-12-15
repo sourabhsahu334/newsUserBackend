@@ -53,6 +53,7 @@ passport.use(
               name: profile.displayName,
               accessToken: accessToken,
               refreshToken: refreshToken,
+                  credits: 100,
               googleGrantedScopes: grantedScopes,
               createdAt: new Date()
             };
