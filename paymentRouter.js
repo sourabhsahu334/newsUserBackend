@@ -129,7 +129,10 @@ router.post('/verify-payment', authMiddleware.verifyToken, authMiddleware.getUse
 
           await usersCollection.updateOne(
             { _id: userId },
-            { $inc: { credits: 250 } }
+            {
+              $inc: { credits: 250 },
+              $set: { premium: true }
+            }
           );
 
           console.log(`Credits incremented by 250 for user: ${order.userId}`);
