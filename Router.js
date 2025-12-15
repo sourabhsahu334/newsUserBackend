@@ -113,6 +113,7 @@ const prompt = `
 Extract the following details from this resume PDF into a JSON object:
 
 - name
+- email
 - current_company
 - skillsets (array of strings)
 - collegename
