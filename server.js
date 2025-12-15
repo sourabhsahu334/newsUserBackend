@@ -3,6 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import routes from "./Router.js"; // Import the router module
 import googleroutes from "./es.js";
+import paymentroutes from "./paymentRouter.js";
 import './db/connect.js';
 
 const app = express();
@@ -19,12 +20,13 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Use the router for the specified routes
 app.use('/st', routes);
 app.use('/auth', googleroutes);
+app.use('/payment', paymentroutes);
 app.get('/', (req, res) => {
   res.send('Welcome to the Express API! webhook updated33');
 });
 
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0',() => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });

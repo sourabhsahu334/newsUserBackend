@@ -9,6 +9,7 @@ const cheerio = require('cheerio');
 const multer = require('multer');
 const { PdfReader } = require("pdfreader");
 const authMiddleware = require('./middleware/authMiddleware');
+const paymentRouter = require('./paymentRouter');
 
 // Configure multer for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -258,5 +259,8 @@ console.log(resultArray);
 // PDF to text conversion endpoint
 
 
+
+// Mount payment routes
+router.use('/api/payment', paymentRouter);
 
 module.exports = router;

@@ -2,12 +2,17 @@ var express = require('express');
 var passport = require('passport');
 var GoogleStrategy = require('passport-google-oauth20').Strategy;
 var jwt = require('jsonwebtoken');
+var nodemailer = require('nodemailer');
+var crypto = require('crypto');
+var bcrypt = require('bcryptjs');
 
 var dbConnect = require('./db/connect.js');
 var appConfig = require('./config.js');
 var authMiddleware = require('./middleware/authMiddleware.js');
 
 var router = express.Router();
+
+
 
 /* ==============================
    CONFIG
@@ -32,18 +37,18 @@ passport.use(
       callbackURL: GOOGLE_CALLBACK_URL,
       passReqToCallback: true
     },
-    function(req, accessToken, refreshToken, profile, done) {
+    function (req, accessToken, refreshToken, profile, done) {
       var self = this;
       var db = client.db('Interest');
       var usersCollection = db.collection('users');
-      
+
       usersCollection.findOne({ googleId: profile.id })
-        .then(function(user) {
+        .then(function (user) {
           if (user) return user;
           return usersCollection.findOne({ email: profile.emails[0].value });
         })
-        .then(function(user) {
-          var grantedScopes = (req && req.query && req.query.scope) ? 
+        .then(function (user) {
+          var grantedScopes = (req && req.query && req.query.scope) ?
             req.query.scope.split(' ') : [];
 
           if (!user) {
@@ -53,12 +58,12 @@ passport.use(
               name: profile.displayName,
               accessToken: accessToken,
               refreshToken: refreshToken,
-                  credits: 100,
+              credits: 100,
               googleGrantedScopes: grantedScopes,
               createdAt: new Date()
             };
             return usersCollection.insertOne(newUser)
-              .then(function(result) {
+              .then(function (result) {
                 return usersCollection.findOne({ _id: result.insertedId });
               });
           } else {
@@ -72,36 +77,36 @@ passport.use(
             return usersCollection.updateOne(
               { _id: user._id },
               { $set: updateData }
-            ).then(function() {
+            ).then(function () {
               return Object.assign({}, user, updateData);
             });
           }
         })
-        .then(function(user) {
+        .then(function (user) {
           done(null, user);
         })
-        .catch(function(err) {
+        .catch(function (err) {
           done(err, null);
         });
     }
   )
 );
 
-passport.serializeUser(function(user, done) {
+passport.serializeUser(function (user, done) {
   done(null, user.id);
 });
 
-passport.deserializeUser(function(id, done) {
+passport.deserializeUser(function (id, done) {
   var db = client.db('Interest');
   var usersCollection = db.collection('users');
-  
+
   try {
     var objectId = require('mongodb').ObjectId;
     usersCollection.findOne({ _id: new objectId(id) })
-      .then(function(user) {
+      .then(function (user) {
         done(null, user);
       })
-      .catch(function(e) {
+      .catch(function (e) {
         done(e, null);
       });
   } catch (e) {
@@ -127,8 +132,8 @@ router.get(
   })
 );
 
-router.get('/google/callback', function(req, res, next) {
-  passport.authenticate('google', { session: false }, function(err, user) {
+router.get('/google/callback', function (req, res, next) {
+  passport.authenticate('google', { session: false }, function (err, user) {
     if (err || !user) return res.redirect('/auth/failure');
 
     var token = jwt.sign(
@@ -141,15 +146,444 @@ router.get('/google/callback', function(req, res, next) {
   })(req, res, next);
 });
 
-router.get('/logout', function(req, res) {
-  req.logout(function() {});
+router.get('/logout', function (req, res) {
+  req.logout(function () { });
   res.redirect('/');
 });
 
-router.get('/me', authMiddleware.verifyToken, authMiddleware.getUserFromDB, function(req, res) {
+router.get('/me', authMiddleware.verifyToken, authMiddleware.getUserFromDB, function (req, res) {
   res.json(req.user);
 });
 
+/* ==============================
+   EMAIL OTP VERIFICATION
+================================ */
 
+// Configure nodemailer for Gmail
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  pool: true,
+  maxConnections: 1,
+  maxMessages: 200,
+  secure: true,
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_EMAIL,
+    pass: process.env.GMAIL_APP_PASSWORD
+  }
+});
+
+// Store OTPs in database
+const otpCollection = client.db('Interest').collection('otps');
+
+// Generate 6-digit OTP
+function generateOTP() {
+  return crypto.randomInt(100000, 999999).toString();
+}
+
+// Clean up expired OTPs (helper function)
+async function cleanupExpiredOTPs() {
+  try {
+    await otpCollection.deleteMany({
+      expiryTime: { $lt: Date.now() }
+    });
+  } catch (error) {
+    console.error('Error cleaning up expired OTPs:', error);
+  }
+}
+
+// Send OTP to email
+router.post('/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    console.log(req.body)
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    // Clean up expired OTPs first
+    await cleanupExpiredOTPs();
+
+    // Generate OTP
+    const otp = generateOTP();
+    const expiryTime = Date.now() + (5 * 60 * 1000); // 5 minutes
+
+    // Store OTP in database
+    await otpCollection.updateOne(
+      { email: email },
+      {
+        $set: {
+          otp,
+          expiryTime,
+          attempts: 0,
+          createdAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+
+    // Send email
+    const mailOptions = {
+      from: process.env.GMAIL_EMAIL,
+      to: email,
+      subject: 'Your OTP Verification Code',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Email Verification</h2>
+          <p>Thank you for using our service. Use the OTP below to verify your email address:</p>
+          <div style="background: #f0f0f0; padding: 20px; text-align: center; margin: 20px 0;">
+            <h1 style="color: #007bff; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
+          </div>
+          <p><strong>Note:</strong> This OTP will expire in 5 minutes.</p>
+          <p>If you didn't request this OTP, please ignore this email.</p>
+          <hr style="border: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #666; font-size: 14px;">This is an automated message. Please do not reply to this email.</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.json({
+      success: true,
+      message: 'OTP sent successfully',
+      expiryMinutes: 5
+    });
+
+  } catch (error) {
+    console.error('Error sending OTP:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send OTP',
+      error: error.message
+    });
+  }
+});
+
+// Verify OTP
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and OTP are required'
+      });
+    }
+
+    // Get OTP from database
+    const storedData = await otpCollection.findOne({ email: email });
+
+    if (!storedData) {
+      return res.status(400).json({
+        success: false,
+        message: 'OTP not found or expired'
+      });
+    }
+
+    // Check if OTP has expired
+    if (Date.now() > storedData.expiryTime) {
+      await otpCollection.deleteOne({ email: email });
+      return res.status(400).json({
+        success: false,
+        message: 'OTP has expired'
+      });
+    }
+
+    // Check attempts (max 3 attempts)
+    if (storedData.attempts >= 3) {
+      await otpCollection.deleteOne({ email: email });
+      return res.status(400).json({
+        success: false,
+        message: 'Maximum attempts exceeded. Please request a new OTP'
+      });
+    }
+
+    // Verify OTP
+    if (storedData.otp == otp) {
+      // Clear OTP after successful verification
+      await otpCollection.deleteOne({ email: email });
+
+      // Get or create user in database
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
+
+      let user = await usersCollection.findOne({ email: email });
+
+      if (!user) {
+        // Create new user if doesn't exist
+        const newUser = {
+          email: email,
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+          credits: 100,
+          createdAt: new Date()
+        };
+
+        const result = await usersCollection.insertOne(newUser);
+        user = await usersCollection.findOne({ _id: result.insertedId });
+      } else {
+        // Update existing user's email verification status
+        await usersCollection.updateOne(
+          { email: email },
+          {
+            $set: {
+              emailVerified: true,
+              emailVerifiedAt: new Date()
+            }
+          }
+        );
+
+        // Fetch updated user
+        user = await usersCollection.findOne({ email: email });
+      }
+
+      // Generate JWT token
+      const token = jwt.sign(
+        { id: user._id, email: user.email },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+
+      res.json({
+        success: true,
+        message: 'OTP verified successfully',
+        token: token,
+        user: {
+          id: user._id,
+          email: user.email,
+          name: user.name || null,
+          emailVerified: user.emailVerified,
+          credits: user.credits
+        }
+      });
+    } else {
+      // Increment attempts
+      await otpCollection.updateOne(
+        { email: email },
+        { $inc: { attempts: 1 } }
+      );
+
+      res.status(400).json({
+        success: false,
+        message: 'Invalid OTP',
+        remainingAttempts: 3 - (storedData.attempts + 1)
+      });
+    }
+
+  } catch (error) {
+    console.error('Error verifying OTP:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify OTP',
+      error: error.message
+    });
+  }
+});
+
+// Resend OTP
+router.post('/resend-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    // Clean up expired OTPs first
+    await cleanupExpiredOTPs();
+
+    // Generate new OTP
+    const otp = generateOTP();
+    const expiryTime = Date.now() + (5 * 60 * 1000); // 5 minutes
+
+    // Store new OTP in database (replaces existing one)
+    await otpCollection.updateOne(
+      { email: email },
+      {
+        $set: {
+          otp,
+          expiryTime,
+          attempts: 0,
+          createdAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+
+    // Send email
+    const mailOptions = {
+      from: process.env.GMAIL_EMAIL,
+      to: email,
+      subject: 'Your New OTP Verification Code',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Email Verification - New Code</h2>
+          <p>Here is your new OTP verification code:</p>
+          <div style="background: #f0f0f0; padding: 20px; text-align: center; margin: 20px 0;">
+            <h1 style="color: #007bff; font-size: 32px; letter-spacing: 5px;">${otp}</h1>
+          </div>
+          <p><strong>Note:</strong> This OTP will expire in 5 minutes.</p>
+          <p>If you didn't request this OTP, please ignore this email.</p>
+          <hr style="border: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #666; font-size: 14px;">This is an automated message. Please do not reply to this email.</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.json({
+      success: true,
+      message: 'New OTP sent successfully',
+      expiryMinutes: 5
+    });
+
+  } catch (error) {
+    console.error('Error resending OTP:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to resend OTP',
+      error: error.message
+    });
+  }
+});
+
+/* ==============================
+   PASSWORD AUTHENTICATION
+================================ */
+
+// Set password after OTP verification
+router.post('/set-password', authMiddleware.verifyToken, authMiddleware.getUserFromDB, async (req, res) => {
+  try {
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required'
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters long'
+      });
+    }
+
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Update user with hashed password
+    const db = client.db('Interest');
+    const usersCollection = db.collection('users');
+
+    await usersCollection.updateOne(
+      { _id: req.user._id },
+      {
+        $set: {
+          password: hashedPassword,
+          passwordSetAt: new Date()
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      message: 'Password set successfully'
+    });
+
+  } catch (error) {
+    console.error('Error setting password:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to set password',
+      error: error.message
+    });
+  }
+});
+
+// Login with email and password
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+
+    // Find user by email
+    const db = client.db('Interest');
+    const usersCollection = db.collection('users');
+    const user = await usersCollection.findOne({ email: email });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
+    }
+
+    // Check if user has set a password
+    if (!user.password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password not set. Please verify your email first and set a password.'
+      });
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password'
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: user._id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      token: token,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name || null,
+        emailVerified: user.emailVerified,
+        credits: user.credits
+      }
+    });
+
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Login failed',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router;
