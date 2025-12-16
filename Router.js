@@ -10,7 +10,10 @@ const multer = require('multer');
 const { PdfReader } = require("pdfreader");
 const authMiddleware = require('./middleware/authMiddleware');
 const paymentRouter = require('./paymentRouter');
-const pLimit = require('p-limit');
+let pLimit;
+(async () => {
+  pLimit = (await import('p-limit')).default;
+})();
 
 
 // Configure multer for file uploads
