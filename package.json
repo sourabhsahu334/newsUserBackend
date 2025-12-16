@@ -27,6 +27,7 @@
     "multer": "^2.0.2",
     "nodemailer": "^7.0.11",
     "nodemon": "^3.1.0",
+    "p-limit": "^7.2.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "pdfreader": "^3.0.8",

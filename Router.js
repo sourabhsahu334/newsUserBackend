@@ -10,6 +10,8 @@ const multer = require('multer');
 const { PdfReader } = require("pdfreader");
 const authMiddleware = require('./middleware/authMiddleware');
 const paymentRouter = require('./paymentRouter');
+const pLimit = require('p-limit');
+
 
 // Configure multer for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -72,45 +74,44 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // Initialize with the correct class for API Keys
 // Ideally, put the key in process.env.GEMINI_API_KEY
-const genAI = new GoogleGenerativeAI(process.env.API_KEY); 
+const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
-router.post( '/pdf-to-text',
+router.post(
+  '/pdf-to-text',
   // authMiddleware.verifyToken,
   // authMiddleware.getUserFromDB,
-  upload.array('pdfs', 10), async (req, res) => {
-  try {
+  upload.array('pdfs', 10),
+  async (req, res) => {
+    try {
 
-    //  const pdfCount = req.files.length;
+      //  const pdfCount = req.files.length;
 
-    //   if (req.user.credits < pdfCount) {
-    //     return res.status(402).json({
-    //       success: false,
-    //       message: `Not enough credits`
-    //     });
-    //   }
+      //   if (req.user.credits < pdfCount) {
+      //     return res.status(402).json({
+      //       success: false,
+      //       message: `Not enough credits`
+      //     });
+      //   }
 
-    //   // 🔥 Deduct credits first
-    //   const db = client.db('Interest');
-    //   const usersCollection = db.collection('users');
+      //   // 🔥 Deduct credits first
+      //   const db = client.db('Interest');
+      //   const usersCollection = db.collection('users');
 
-    //   await usersCollection.updateOne(
-    //     { _id: req.user._id },
-    //     { $inc: { credits: -pdfCount } }
-    //   );
+      //   await usersCollection.updateOne(
+      //     { _id: req.user._id },
+      //     { $inc: { credits: -pdfCount } }
+      //   );
 
-      
-    const model = genAI.getGenerativeModel({
-model: "gemini-2.0-flash",
-generationConfig: {
-        responseMimeType: "application/json"
-      }
-    });
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      });
 
-    const results = [];
+      const limit = pLimit(3); // only 3 parallel resumes
 
-    for (const file of req.files) {
-      try {
-const prompt = `
+      const prompt = `
 Extract the following details from this resume PDF into a JSON object:
 
 - name
@@ -133,75 +134,81 @@ STRICT RULES:
 Return ONLY valid JSON.
 `;
 
+      const tasks = req.files.map(file =>
+        limit(async () => {
+          try {
+            const result = await model.generateContent([
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: "application/pdf",
+                  data: file.buffer.toString("base64")
+                }
+              }
+            ]);
 
+            const aiText = result.response.text();
+            const parsed = JSON.parse(aiText);
 
+            console.log("Prompt tokens:", result.response.usageMetadata.promptTokenCount);
+            console.log("Response tokens:", result.response.usageMetadata.candidatesTokenCount);
+            console.log("Total tokens:", result.response.usageMetadata.totalTokenCount);
 
-        const result = await model.generateContent([
-          { text: prompt },
-          {
-            inlineData: {
-              mimeType: "application/pdf",
-              data: file.buffer.toString("base64")
-            }
+            parsed.experience = normalizeExperience(parsed.experience);
+
+            return {
+              filename: file.originalname,
+              parsed_data: parsed
+            };
+
+          } catch (err) {
+            return {
+              filename: file.originalname,
+              error: err.message
+            };
           }
-        ]);
+        })
+      );
 
-        const aiText = result.response.text();
-        const parsed = JSON.parse(aiText);
-        console.log("Prompt tokens:", result.response.usageMetadata.promptTokenCount);
-console.log("Response tokens:", result.response.usageMetadata.candidatesTokenCount);
-console.log("Total tokens:", result.response.usageMetadata.totalTokenCount);
+      const results = await Promise.all(tasks);
 
-parsed.experience = normalizeExperience(parsed.experience);
+      res.json({ success: true, results });
 
-        results.push({
-          filename: file.originalname,
-          parsed_data: parsed
-        });
-
-      } catch (err) {
-        results.push({
-          filename: file.originalname,
-          error: err.message
-        });
-      }
+    } catch (err) {
+      res.status(500).json({ error: err.message });
     }
-
-    res.json({ success: true, results });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
-});
+);
+
 // Define routes for the router
-router.get('/normalNews', async(req, res) => {
-    const db = client.db("NewsList");
-    const collection = db.collection("Student");
-    const documents = await collection.find().limit(15);
-    res.json({res:documents[0]?.object})
+router.get('/normalNews', async (req, res) => {
+  const db = client.db("NewsList");
+  const collection = db.collection("Student");
+  const documents = await collection.find().limit(15);
+  res.json({ res: documents[0]?.object })
 });
 
-router.get('/getCollectionData', async(req, res) => {
-  const {collectionName}= req.query;
+router.get('/getCollectionData', async (req, res) => {
+  const { collectionName } = req.query;
   const db = client.db("NewsList");
   const collection = db.collection(collectionName);
-const latestDoc = await collection
-      .find()
-      .sort({ _id: -1 }) // Sort by _id descending
-      .limit(1)
-      .toArray();
+  const latestDoc = await collection
+    .find()
+    .sort({ _id: -1 }) // Sort by _id descending
+    .limit(1)
+    .toArray();
 
-    res.json({ res: latestDoc });
+  res.json({ res: latestDoc });
 
 });
 
-router.get('/astrolings', async(req, res) => {
+router.get('/astrolings', async (req, res) => {
   // const {collectionName}= req.query;
   const db = client.db("NewsList");
   const collection = db.collection("Astro");
-    const latestDocs = await collection.find().toArray();
+  const latestDocs = await collection.find().toArray();
 
-    res.json({ res: latestDocs });
+  res.json({ res: latestDocs });
 
 });
 
@@ -213,40 +220,40 @@ router.get('/categoryList', async (req, res) => {
   // Get a list of all collection names
   const collections = await db.listCollections().toArray();
   let collectionNames = collections.map(collection => collection.name);
-  collectionNames= collectionNames?.filter((item)=>item!=='Dataset')
-  collectionNames= collectionNames?.filter((item)=>item!=='Student')
+  collectionNames = collectionNames?.filter((item) => item !== 'Dataset')
+  collectionNames = collectionNames?.filter((item) => item !== 'Student')
   res.json({ collections: collectionNames });
   console.log("done");
 });
 
-router.get('/about', async(req, res) => {
-const url = `https://www.youtube.com/results?search_query=${req.query.topic}`
-  const html= await axios.get(url);
-  const $=cheerio.load(html.data);
+router.get('/about', async (req, res) => {
+  const url = `https://www.youtube.com/results?search_query=${req.query.topic}`
+  const html = await axios.get(url);
+  const $ = cheerio.load(html.data);
   const plainText = $.root().text();
   let currentIndex = plainText.indexOf('/shorts')
   const searchString = '/shorts';
   const substringLength = 10;
-  const resultArray = [];  while (currentIndex !== -1) {
+  const resultArray = []; while (currentIndex !== -1) {
     // const start = Math.max(0, currentIndex - substringLength);
-    const substring = plainText.substring(currentIndex, currentIndex+20);
-    resultArray.push(substring); 
+    const substring = plainText.substring(currentIndex, currentIndex + 20);
+    resultArray.push(substring);
     // Move to the next occurrence of the search string
     currentIndex = plainText.indexOf(searchString, currentIndex + 1);
   }
   console.log(resultArray);
 
-  res.send({res:plainText.indexOf('shorts'),r:plainText.substring(currentIndex,currentIndex+20),res3:resultArray})
+  res.send({ res: plainText.indexOf('shorts'), r: plainText.substring(currentIndex, currentIndex + 20), res3: resultArray })
 
-// Print the plain text content
-console.log(resultArray);
+  // Print the plain text content
+  console.log(resultArray);
 
   // console.log(html);
-  const links = [ ]
-  const mainlist= $('.yt-spec-icon-shape')
+  const links = []
+  const mainlist = $('.yt-spec-icon-shape')
   // console.log(html)
 
-  mainlist.each((index,element)=>{
+  mainlist.each((index, element) => {
     const article = $(element);
 
     console.log("sd");
