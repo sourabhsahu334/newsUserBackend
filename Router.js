@@ -87,23 +87,23 @@ router.post(
   async (req, res) => {
     try {
 
-      //  const pdfCount = req.files.length;
+      const pdfCount = req.files.length;
 
-      //   if (req.user.credits < pdfCount) {
-      //     return res.status(402).json({
-      //       success: false,
-      //       message: `Not enough credits`
-      //     });
-      //   }
+      if (req.user.credits < pdfCount) {
+        return res.status(402).json({
+          success: false,
+          message: `Not enough credits`
+        });
+      }
 
-      //   // 🔥 Deduct credits first
-      //   const db = client.db('Interest');
-      //   const usersCollection = db.collection('users');
+      // 🔥 Deduct credits first
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
 
-      //   await usersCollection.updateOne(
-      //     { _id: req.user._id },
-      //     { $inc: { credits: -pdfCount } }
-      //   );
+      await usersCollection.updateOne(
+        { _id: req.user._id },
+        { $inc: { credits: -pdfCount } }
+      );
 
       const model = genAI.getGenerativeModel({
         model: "gemini-2.0-flash",
