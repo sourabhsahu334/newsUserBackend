@@ -169,6 +169,14 @@ router.get('/me', authMiddleware.verifyToken, authMiddleware.getUserFromDB, func
   res.json(req.user);
 });
 
+router.get('/isPremiumUser', authMiddleware.verifyToken, authMiddleware.getUserFromDB, function (req, res) {
+  const isPremium = req.user.premium === true;
+  res.json({
+    isPremium: isPremium,
+    message: isPremium ? 'User is premium' : 'User is not premium'
+  });
+});
+
 router.get('/gmail/inbox', authMiddleware.verifyToken, getInbox);
 router.post('/gmail/send', authMiddleware.verifyToken, sendEmail);
 
