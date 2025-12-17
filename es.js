@@ -11,6 +11,7 @@ var appConfig = require('./config.js');
 var authMiddleware = require('./middleware/authMiddleware.js');
 
 var router = express.Router();
+var { getInbox, sendEmail } = require('./controller/emailcontroller.js');
 
 
 
@@ -123,9 +124,21 @@ router.get(
     scope: [
       'profile',
       'email'
-      // 'https://www.googleapis.com/auth/gmail.readonly',
-      // 'https://www.googleapis.com/auth/gmail.send',
-      // 'https://www.googleapis.com/auth/calendar'
+    ],
+    accessType: 'offline',
+    prompt: 'consent'
+  })
+);
+
+router.get(
+  '/google/permissions',
+  passport.authenticate('google', {
+    scope: [
+      'profile',
+      'email',
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/calendar'
     ],
     accessType: 'offline',
     prompt: 'consent'
@@ -154,6 +167,9 @@ router.get('/logout', function (req, res) {
 router.get('/me', authMiddleware.verifyToken, authMiddleware.getUserFromDB, function (req, res) {
   res.json(req.user);
 });
+
+router.get('/gmail/inbox', authMiddleware.verifyToken, getInbox);
+router.post('/gmail/send', authMiddleware.verifyToken, sendEmail);
 
 /* ==============================
    EMAIL OTP VERIFICATION
