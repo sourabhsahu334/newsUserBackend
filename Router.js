@@ -81,8 +81,8 @@ const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
 router.post(
   '/pdf-to-text',
-  // authMiddleware.verifyToken,
-  // authMiddleware.getUserFromDB,
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
   upload.array('pdfs', 10),
   async (req, res) => {
     try {
