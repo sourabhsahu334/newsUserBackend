@@ -1,15 +1,14 @@
 // routes.js
 
-const express = require('express');
-const { client } = require('./db/connect');
+import express from 'express';
+import { client } from './db/connect.js';
 // const { youtube } = require('scrape-youtube');
 const router = express.Router();
-const axios = require('axios');
-const cheerio = require('cheerio');
-const multer = require('multer');
-const { PdfReader } = require("pdfreader");
-const authMiddleware = require('./middleware/authMiddleware');
-const paymentRouter = require('./paymentRouter');
+import axios from 'axios';
+import multer from 'multer';
+import { PdfReader } from 'pdfreader';
+import authMiddleware from './middleware/authMiddleware.js';
+import paymentRouter from './paymentRouter.js';
 let pLimit;
 (async () => {
   pLimit = (await import('p-limit')).default;
@@ -72,7 +71,7 @@ function normalizeExperience(experienceArray) {
 }
 
 // Change this import
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+import { GoogleGenerativeAI } from '@google/generative-ai';
 // const { PdfReader } = require("pdfreader");
 
 // Initialize with the correct class for API Keys
@@ -87,23 +86,23 @@ router.post(
   async (req, res) => {
     try {
 
-      const pdfCount = req.files.length;
+      // const pdfCount = req.files.length;
 
-      if (req.user.credits < pdfCount) {
-        return res.status(402).json({
-          success: false,
-          message: `Not enough credits`
-        });
-      }
+      // if (req.user.credits < pdfCount) {
+      //   return res.status(402).json({
+      //     success: false,
+      //     message: `Not enough credits`
+      //   });
+      // }
 
-      // 🔥 Deduct credits first
-      const db = client.db('Interest');
-      const usersCollection = db.collection('users');
+      // // 🔥 Deduct credits first
+      // const db = client.db('Interest');
+      // const usersCollection = db.collection('users');
 
-      await usersCollection.updateOne(
-        { _id: req.user._id },
-        { $inc: { credits: -pdfCount } }
-      );
+      // await usersCollection.updateOne(
+      //   { _id: req.user._id },
+      //   { $inc: { credits: -pdfCount } }
+      // );
 
       const model = genAI.getGenerativeModel({
         model: "gemini-2.0-flash",
@@ -276,4 +275,4 @@ router.get('/about', async (req, res) => {
 // Mount payment routes
 router.use('/api/payment', paymentRouter);
 
-module.exports = router;
+export default router;

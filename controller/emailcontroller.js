@@ -1,6 +1,6 @@
-const { google } = require('googleapis');
-const User = require('../models/User.js');
-const { getOAuth2Client } = require('../services/googleService.js');
+import { google } from 'googleapis';
+import User from '../models/User.js';
+import getOAuth2Client from '../services/googleService.js';
 
 const getInbox = async (req, res) => {
     const user = await User.findById(req.user.id);
@@ -29,7 +29,7 @@ const sendEmail = async (req, res) => {
     res.json({ status: 'Email sent' });
 };
 
-module.exports = {
+export {
     getInbox,
     sendEmail
 };

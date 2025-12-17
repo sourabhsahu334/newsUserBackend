@@ -1,4 +1,4 @@
-const { google } = require('googleapis');
+import { google } from 'googleapis';
 
 const getOAuth2Client = (user) => {
   const oAuth2Client = new google.auth.OAuth2(
@@ -13,4 +13,4 @@ const getOAuth2Client = (user) => {
   return oAuth2Client;
 };
 
-module.exports = getOAuth2Client; 
+export default getOAuth2Client; 

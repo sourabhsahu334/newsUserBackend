@@ -1,9 +1,10 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const Razorpay = require('razorpay');
-const crypto = require('crypto');
-const { client } = require('./db/connect');
-const authMiddleware = require('./middleware/authMiddleware');
+import Razorpay from 'razorpay';
+import crypto from 'crypto';
+import { client } from './db/connect.js';
+import authMiddleware from './middleware/authMiddleware.js';
+import { ObjectId } from 'mongodb';
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
@@ -118,7 +119,6 @@ router.post('/verify-payment', authMiddleware.verifyToken, authMiddleware.getUse
       // Increment user credits by 250
       try {
         const usersCollection = db.collection('users');
-        const ObjectId = require('mongodb').ObjectId;
 
         // Get the order to find user information
         const order = await ordersCollection.findOne({ orderId: razorpay_order_id });
@@ -308,4 +308,4 @@ router.get('/payments', authMiddleware.verifyToken, authMiddleware.getUserFromDB
   }
 });
 
-module.exports = router;
+export default router;

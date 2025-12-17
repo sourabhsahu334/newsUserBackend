@@ -1,17 +1,19 @@
-var express = require('express');
-var passport = require('passport');
-var GoogleStrategy = require('passport-google-oauth20').Strategy;
-var jwt = require('jsonwebtoken');
-var nodemailer = require('nodemailer');
-var crypto = require('crypto');
-var bcrypt = require('bcryptjs');
+import express from 'express';
+import passport from 'passport';
+import pkg from 'passport-google-oauth20';
+const { Strategy: GoogleStrategy } = pkg;
+import jwt from 'jsonwebtoken';
+import nodemailer from 'nodemailer';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+import { ObjectId } from 'mongodb';
 
-var dbConnect = require('./db/connect.js');
-var appConfig = require('./config.js');
-var authMiddleware = require('./middleware/authMiddleware.js');
+import * as dbConnect from './db/connect.js';
+import * as appConfig from './config.js';
+import authMiddleware from './middleware/authMiddleware.js';
 
-var router = express.Router();
-var { getInbox, sendEmail } = require('./controller/emailcontroller.js');
+const router = express.Router();
+import { getInbox, sendEmail } from './controller/emailcontroller.js';
 
 
 
@@ -102,8 +104,7 @@ passport.deserializeUser(function (id, done) {
   var usersCollection = db.collection('users');
 
   try {
-    var objectId = require('mongodb').ObjectId;
-    usersCollection.findOne({ _id: new objectId(id) })
+    usersCollection.findOne({ _id: new ObjectId(id) })
       .then(function (user) {
         done(null, user);
       })
@@ -602,4 +603,4 @@ router.post('/login', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
