@@ -131,7 +131,7 @@ router.post('/verify-payment', authMiddleware.verifyToken, authMiddleware.getUse
             { _id: userId },
             {
               $inc: { credits: 250 },
-              $set: { premium: true }
+              $set: { iisPremium: true }
             }
           );
 
