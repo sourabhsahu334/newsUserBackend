@@ -170,7 +170,8 @@ router.get('/me', authMiddleware.verifyToken, authMiddleware.getUserFromDB, func
 });
 
 router.get('/isPremiumUser', authMiddleware.verifyToken, authMiddleware.getUserFromDB, function (req, res) {
-  const isPremium = req.user.premium === true;
+  const isPremium = req.user.isPremium === true;
+  console.log(req.user)
   res.json({
     isPremium: isPremium,
     message: isPremium ? 'User is premium' : 'User is not premium'
