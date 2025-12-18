@@ -177,28 +177,30 @@ Return ONLY valid JSON.
 
       const results = await Promise.all(tasks);
 
-      // 🔥 Save history for each processed document
-      const historyCollection = db.collection('history');
-      const historyEntries = results.map(result => ({
-        userId: req.user._id,
-        userEmail: req.user.email,
-        userName: req.user.name || null,
-        processType: 'pdf-to-text',
-        filename: result.filename,
-        parsedData: result.parsed_data || null,
-        error: result.error || null,
-        status: result.error ? 'failed' : 'success',
-        creditsUsed: 1,
-        timestamp: new Date(),
-        metadata: {
-          totalFiles: pdfCount,
-          remainingCredits: req.user.credits - pdfCount
-        }
-      }));
+      // 🔥 Save history for each processed document if user is premium
+      if (req.user.isPremium) {
+        const historyCollection = db.collection('history');
+        const historyEntries = results.map(result => ({
+          userId: req.user._id,
+          userEmail: req.user.email,
+          userName: req.user.name || null,
+          processType: 'pdf-to-text',
+          filename: result.filename,
+          parsedData: result.parsed_data || null,
+          error: result.error || null,
+          status: result.error ? 'failed' : 'success',
+          creditsUsed: 1,
+          timestamp: new Date(),
+          metadata: {
+            totalFiles: pdfCount,
+            remainingCredits: req.user.credits - pdfCount
+          }
+        }));
 
-      // Insert all history entries
-      if (historyEntries.length > 0) {
-        await historyCollection.insertMany(historyEntries);
+        // Insert all history entries
+        if (historyEntries.length > 0) {
+          await historyCollection.insertMany(historyEntries);
+        }
       }
 
       res.json({ success: true, results });
