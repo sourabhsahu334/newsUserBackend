@@ -177,6 +177,30 @@ Return ONLY valid JSON.
 
       const results = await Promise.all(tasks);
 
+      // 🔥 Save history for each processed document
+      const historyCollection = db.collection('history');
+      const historyEntries = results.map(result => ({
+        userId: req.user._id,
+        userEmail: req.user.email,
+        userName: req.user.name || null,
+        processType: 'pdf-to-text',
+        filename: result.filename,
+        parsedData: result.parsed_data || null,
+        error: result.error || null,
+        status: result.error ? 'failed' : 'success',
+        creditsUsed: 1,
+        timestamp: new Date(),
+        metadata: {
+          totalFiles: pdfCount,
+          remainingCredits: req.user.credits - pdfCount
+        }
+      }));
+
+      // Insert all history entries
+      if (historyEntries.length > 0) {
+        await historyCollection.insertMany(historyEntries);
+      }
+
       res.json({ success: true, results });
 
     } catch (err) {
@@ -272,7 +296,129 @@ router.get('/about', async (req, res) => {
 
 
 
+// History routes
+// Get all history for the authenticated user
+router.get('/history',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+
+      const { page = 1, limit = 20, processType, status } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      // Build query filter
+      const filter = { userId: req.user._id };
+      if (processType) filter.processType = processType;
+      if (status) filter.status = status;
+
+      // Get history with pagination
+      const history = await historyCollection
+        .find(filter)
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .toArray();
+
+      // Get total count for pagination
+      const total = await historyCollection.countDocuments(filter);
+
+      res.json({
+        success: true,
+        data: history,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / parseInt(limit))
+        }
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Get history by process type
+router.get('/history/:processType',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+
+      const { processType } = req.params;
+      const { page = 1, limit = 20 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      const history = await historyCollection
+        .find({
+          userId: req.user._id,
+          processType: processType
+        })
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .toArray();
+
+      const total = await historyCollection.countDocuments({
+        userId: req.user._id,
+        processType: processType
+      });
+
+      res.json({
+        success: true,
+        data: history,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / parseInt(limit))
+        }
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Get single history entry by ID
+router.get('/history/entry/:id',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+      const { ObjectId } = await import('mongodb');
+
+      const historyEntry = await historyCollection.findOne({
+        _id: new ObjectId(req.params.id),
+        userId: req.user._id
+      });
+
+      if (!historyEntry) {
+        return res.status(404).json({
+          success: false,
+          message: 'History entry not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: historyEntry
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
 // Mount payment routes
 router.use('/api/payment', paymentRouter);
 
 export default router;
+
