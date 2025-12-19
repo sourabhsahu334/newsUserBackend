@@ -67,6 +67,122 @@ router.post('/create-order', authMiddleware.verifyToken, authMiddleware.getUserF
   }
 });
 
+
+
+// lib/paypal.js
+export async function getPayPalAccessToken() {
+  const auth = Buffer.from(
+    `${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`
+  ).toString("base64");
+
+  const response = await fetch(
+    `${process.env.PAYPAL_BASE_URL}/v1/oauth2/token`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${auth}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "grant_type=client_credentials",
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error("Failed to get PayPal access token");
+  }
+
+  return data.access_token;
+}
+
+
+router.post("/create-order-paypal", async (req, res) => {
+  try {
+    const { amount, currency = "USD", planName } = req.body;
+
+    if (!amount || !planName) {
+      return res.status(400).json({ error: "Invalid request" });
+    }
+
+    const accessToken = await getPayPalAccessToken();
+
+    const response = await fetch(
+      `${process.env.PAYPAL_BASE_URL}/v2/checkout/orders`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          intent: "CAPTURE",
+          purchase_units: [
+            {
+              description: planName,
+              amount: {
+                currency_code: currency,
+                value: amount.toFixed(2),
+              },
+            },
+          ],
+        }),
+      }
+    );
+
+    const order = await response.json();
+    res.json({ order });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Order creation failed" });
+  }
+});
+
+/* =========================
+   CAPTURE PAYMENT
+========================= */
+router.post("/verify-payment-paypal", async (req, res) => {
+  try {
+    const { orderId } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({ error: "Order ID missing" });
+    }
+
+    const accessToken = await getPayPalAccessToken();
+
+    const response = await fetch(
+      `${process.env.PAYPAL_BASE_URL}/v2/checkout/orders/${orderId}/capture`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (data.status !== "COMPLETED") {
+      return res.status(400).json({ error: "Payment not completed" });
+    }
+
+    // ✅ SUCCESS POINT
+    // Add credits / activate plan / store transaction
+
+    res.json({
+      success: true,
+      transactionId:
+        data.purchase_units[0].payments.captures[0].id,
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Payment capture failed" });
+  }
+});
+
 // Verify Payment Signature
 router.post('/verify-payment', authMiddleware.verifyToken, authMiddleware.getUserFromDB, async (req, res) => {
   try {
