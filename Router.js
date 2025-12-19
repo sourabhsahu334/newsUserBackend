@@ -318,6 +318,8 @@ router.get('/history',
       if (folderId) filter.folderId = folderId;
       if (status) filter.status = status;
 
+      console.log('Filter being used:', filter);
+
       // Get history with pagination
       const history = await historyCollection
         .find(filter)
@@ -326,6 +328,7 @@ router.get('/history',
         .limit(parseInt(limit))
         .toArray();
 
+      console.log(`Found ${history.length} history entries for user:`, req.user._id);
       // Get total count for pagination
       const total = await historyCollection.countDocuments(filter);
 
@@ -420,6 +423,88 @@ router.get('/history/entry/:id',
     }
   }
 );
+
+// Search history by resume fields (name, email, skills, company, mobile)
+router.post('/search-history',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+
+      const { query, page = 1, limit = 20, folderId } = req.body;
+
+      // Validate search query
+      if (!query || typeof query !== 'string' || query.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Search query is required and must be a non-empty string'
+        });
+      }
+
+      const trimmedQuery = query.trim();
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      // Build base filter with userId
+      const baseFilter = {
+        userId: req.user._id,
+        status: 'success' // Only search in successful entries
+      };
+
+      // Add folderId filter if provided
+      if (folderId) {
+        baseFilter.folderId = folderId;
+      }
+
+      // Build search filter with $or for multiple fields
+      const searchFilter = {
+        ...baseFilter,
+        $or: [
+          { "parsedData.name": { $regex: trimmedQuery, $options: "i" } },
+          { "parsedData.email": { $regex: trimmedQuery, $options: "i" } },
+          { "parsedData.mobile": { $regex: trimmedQuery } },
+          { "parsedData.skillsets": { $regex: trimmedQuery, $options: "i" } },
+          { "parsedData.experience.company": { $regex: trimmedQuery, $options: "i" } },
+          { "parsedData.current_company": { $regex: trimmedQuery, $options: "i" } },
+          { "parsedData.collegename": { $regex: trimmedQuery, $options: "i" } }
+        ]
+      };
+
+      // Execute search with pagination
+      const results = await historyCollection
+        .find(searchFilter)
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .toArray();
+
+      // Get total count for pagination
+      const total = await historyCollection.countDocuments(searchFilter);
+
+      res.json({
+        success: true,
+        query: trimmedQuery,
+        data: results,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / parseInt(limit))
+        }
+      });
+
+    } catch (err) {
+      console.error('Error searching history:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to search history',
+        error: err.message
+      });
+    }
+  }
+);
+
 
 // Create folder endpoint - adds folder name to user's folderTypes array
 router.post('/create-folder',
