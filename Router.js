@@ -421,6 +421,102 @@ router.get('/history/entry/:id',
   }
 );
 
+// Create folder endpoint - adds folder name to user's folderTypes array
+router.post('/create-folder',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const { folderName } = req.body;
+
+      // Validate folderName
+      if (!folderName || typeof folderName !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Folder name is required and must be a string'
+        });
+      }
+
+      // Trim and validate folderName is not empty
+      const trimmedFolderName = folderName.trim();
+      if (trimmedFolderName.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Folder name cannot be empty'
+        });
+      }
+
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
+
+      // Add folderName to user's folderTypes array using $addToSet to prevent duplicates
+      const result = await usersCollection.updateOne(
+        { _id: req.user._id },
+        {
+          $addToSet: { folderTypes: trimmedFolderName }
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Fetch updated user to return the folderTypes array
+      const updatedUser = await usersCollection.findOne(
+        { _id: req.user._id },
+        { projection: { folderTypes: 1 } }
+      );
+
+      res.json({
+        success: true,
+        message: 'Folder created successfully',
+        folderTypes: updatedUser.folderTypes || []
+      });
+
+    } catch (err) {
+      console.error('Error creating folder:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to create folder',
+        error: err.message
+      });
+    }
+  }
+);
+
+// Get user's folders
+router.get('/folders',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
+
+      const user = await usersCollection.findOne(
+        { _id: req.user._id },
+        { projection: { folderTypes: 1 } }
+      );
+
+      res.json({
+        success: true,
+        folderTypes: user?.folderTypes || []
+      });
+
+    } catch (err) {
+      console.error('Error fetching folders:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch folders',
+        error: err.message
+      });
+    }
+  }
+);
+
 // Mount payment routes
 router.use('/api/payment', paymentRouter);
 
