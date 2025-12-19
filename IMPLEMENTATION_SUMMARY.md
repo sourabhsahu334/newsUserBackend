@@ -32,10 +32,10 @@ Successfully implemented a comprehensive history tracking system for the user ba
 #### a) GET /history
 - Retrieves all history for authenticated user
 - Supports pagination (page, limit)
-- Supports filtering by processType and status
+- Supports filtering by folderId and status
 - Returns total count and pagination metadata
 
-#### b) GET /history/:processType
+#### b) GET /history/:folderId
 - Retrieves history filtered by specific process type
 - Supports pagination
 - Useful for viewing only PDF processing history
@@ -55,7 +55,7 @@ Successfully implemented a comprehensive history tracking system for the user ba
   userId: ObjectId,              // Reference to user
   userEmail: String,             // User's email
   userName: String | null,       // User's name
-  processType: String,           // e.g., "pdf-to-text"
+  folderId: String,           // e.g., "pdf-to-text"
   filename: String,              // Original filename
   parsedData: Object | null,     // Extracted data
   error: String | null,          // Error message if failed
@@ -86,7 +86,7 @@ Authorization: Bearer <token>
 
 ### Filter by Status
 ```bash
-GET /history?status=success&processType=pdf-to-text
+GET /history?status=success&folderId=pdf-to-text
 Authorization: Bearer <token>
 ```
 
@@ -146,7 +146,7 @@ Response Sent to User
 1. **Create Database Indexes:**
    ```javascript
    db.history.createIndex({ userId: 1, timestamp: -1 })
-   db.history.createIndex({ processType: 1 })
+   db.history.createIndex({ folderId: 1 })
    db.history.createIndex({ status: 1 })
    ```
 
@@ -154,7 +154,7 @@ Response Sent to User
    - Process some PDFs to create history entries
    - Test all three GET endpoints
    - Verify pagination works correctly
-   - Test filtering by status and processType
+   - Test filtering by status and folderId
 
 3. **Frontend Integration:**
    - Create a history page in your frontend
@@ -175,9 +175,9 @@ Response Sent to User
 - [ ] Check MongoDB to confirm data is stored correctly
 - [ ] Test GET /history endpoint
 - [ ] Test pagination (page 1, page 2, etc.)
-- [ ] Test filtering by processType
+- [ ] Test filtering by folderId
 - [ ] Test filtering by status
-- [ ] Test GET /history/:processType endpoint
+- [ ] Test GET /history/:folderId endpoint
 - [ ] Test GET /history/entry/:id endpoint
 - [ ] Verify user can only see their own history
 - [ ] Test with invalid history ID
@@ -186,7 +186,7 @@ Response Sent to User
 ## Performance Considerations
 
 - **Pagination:** All endpoints use pagination to prevent loading too much data
-- **Indexes:** Recommended indexes on userId, timestamp, processType, and status
+- **Indexes:** Recommended indexes on userId, timestamp, folderId, and status
 - **Data Size:** Monitor collection size and implement retention policies if needed
 - **Query Optimization:** Filters are applied at database level for efficiency
 

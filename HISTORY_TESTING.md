@@ -29,7 +29,7 @@ curl -X GET "http://localhost:3000/history?page=2&limit=10" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
 # Filter by process type
-curl -X GET "http://localhost:3000/history?processType=pdf-to-text" \
+curl -X GET "http://localhost:3000/history?folderId=pdf-to-text" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
 # Filter by status
@@ -37,7 +37,7 @@ curl -X GET "http://localhost:3000/history?status=success" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 
 # Combine filters
-curl -X GET "http://localhost:3000/history?processType=pdf-to-text&status=failed&page=1&limit=5" \
+curl -X GET "http://localhost:3000/history?folderId=pdf-to-text&status=failed&page=1&limit=5" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
@@ -78,7 +78,7 @@ curl -X GET "http://localhost:3000/history/entry/HISTORY_ID" \
 - **Query Params:**
   - `page`: 1
   - `limit`: 20
-  - `processType`: pdf-to-text (optional)
+  - `folderId`: pdf-to-text (optional)
   - `status`: success (optional)
 
 #### Get History by Process Type
@@ -132,7 +132,7 @@ async function getFilteredHistory() {
   try {
     const response = await api.get('/history', {
       params: {
-        processType: 'pdf-to-text',
+        folderId: 'pdf-to-text',
         status: 'success',
         page: 1,
         limit: 10
@@ -186,7 +186,7 @@ async function getSingleHistory(historyId) {
       "userId": "67638a1b2c3d4e5f6a7b8c9e",
       "userEmail": "user@example.com",
       "userName": "John Doe",
-      "processType": "pdf-to-text",
+      "folderId": "pdf-to-text",
       "filename": "resume.pdf",
       "parsedData": {
         "name": "Jane Smith",
@@ -254,7 +254,7 @@ db.history.find().sort({ timestamp: -1 }).limit(10).pretty()
 
 // Create index for better performance (recommended)
 db.history.createIndex({ userId: 1, timestamp: -1 })
-db.history.createIndex({ processType: 1 })
+db.history.createIndex({ folderId: 1 })
 db.history.createIndex({ status: 1 })
 ```
 
@@ -263,7 +263,7 @@ db.history.createIndex({ status: 1 })
 1. **Create Indexes:**
    ```javascript
    db.history.createIndex({ userId: 1, timestamp: -1 })
-   db.history.createIndex({ processType: 1 })
+   db.history.createIndex({ folderId: 1 })
    db.history.createIndex({ status: 1 })
    ```
 

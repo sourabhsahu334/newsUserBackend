@@ -177,6 +177,8 @@ Return ONLY valid JSON.
 
       const results = await Promise.all(tasks);
 
+      const { folderId = 'pdf-to-text' } = req.body;
+
       // 🔥 Save history for each processed document if user is premium
       if (req.user.isPremium) {
         const historyCollection = db.collection('history');
@@ -184,7 +186,7 @@ Return ONLY valid JSON.
           userId: req.user._id,
           userEmail: req.user.email,
           userName: req.user.name || null,
-          processType: 'pdf-to-text',
+          folderId: folderId,
           filename: result.filename,
           parsedData: result.parsed_data || null,
           error: result.error || null,
@@ -308,12 +310,12 @@ router.get('/history',
       const db = client.db('Interest');
       const historyCollection = db.collection('history');
 
-      const { page = 1, limit = 20, processType, status } = req.query;
+      const { page = 1, limit = 20, folderId, status } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
 
       // Build query filter
       const filter = { userId: req.user._id };
-      if (processType) filter.processType = processType;
+      if (folderId) filter.folderId = folderId;
       if (status) filter.status = status;
 
       // Get history with pagination
@@ -343,8 +345,8 @@ router.get('/history',
   }
 );
 
-// Get history by process type
-router.get('/history/:processType',
+// Get history by folder ID
+router.get('/history/:folderId',
   authMiddleware.verifyToken,
   authMiddleware.getUserFromDB,
   async (req, res) => {
@@ -352,14 +354,14 @@ router.get('/history/:processType',
       const db = client.db('Interest');
       const historyCollection = db.collection('history');
 
-      const { processType } = req.params;
+      const { folderId } = req.params;
       const { page = 1, limit = 20 } = req.query;
       const skip = (parseInt(page) - 1) * parseInt(limit);
 
       const history = await historyCollection
         .find({
           userId: req.user._id,
-          processType: processType
+          folderId: folderId
         })
         .sort({ timestamp: -1 })
         .skip(skip)
@@ -368,7 +370,7 @@ router.get('/history/:processType',
 
       const total = await historyCollection.countDocuments({
         userId: req.user._id,
-        processType: processType
+        folderId: folderId
       });
 
       res.json({

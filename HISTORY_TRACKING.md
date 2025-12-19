@@ -17,7 +17,7 @@ Each history entry contains the following fields:
   "userId": "ObjectId - Reference to user's _id",
   "userEmail": "string - User's email address",
   "userName": "string - User's name (nullable)",
-  "processType": "string - Type of process (e.g., 'pdf-to-text')",
+  "folderId": "string - Type of process (e.g., 'pdf-to-text')",
   "filename": "string - Name of the processed file",
   "parsedData": "object - Extracted data from the document (nullable)",
   "error": "string - Error message if processing failed (nullable)",
@@ -41,12 +41,12 @@ Each history entry contains the following fields:
 **Query Parameters:**
 - `page` (optional, default: 1) - Page number for pagination
 - `limit` (optional, default: 20) - Number of records per page
-- `processType` (optional) - Filter by process type (e.g., 'pdf-to-text')
+- `folderId` (optional) - Filter by process type (e.g., 'pdf-to-text')
 - `status` (optional) - Filter by status ('success' or 'failed')
 
 **Example Request:**
 ```bash
-GET /history?page=1&limit=20&processType=pdf-to-text&status=success
+GET /history?page=1&limit=20&folderId=pdf-to-text&status=success
 Authorization: Bearer <your-jwt-token>
 ```
 
@@ -60,7 +60,7 @@ Authorization: Bearer <your-jwt-token>
       "userId": "507f191e810c19729de860ea",
       "userEmail": "user@example.com",
       "userName": "John Doe",
-      "processType": "pdf-to-text",
+      "folderId": "pdf-to-text",
       "filename": "resume.pdf",
       "parsedData": {
         "name": "Jane Smith",
@@ -87,12 +87,12 @@ Authorization: Bearer <your-jwt-token>
 ```
 
 ### 2. Get History by Process Type
-**Endpoint:** `GET /history/:processType`
+**Endpoint:** `GET /history/:folderId`
 
 **Authentication:** Required (JWT Token)
 
 **Path Parameters:**
-- `processType` - Type of process to filter (e.g., 'pdf-to-text')
+- `folderId` - Type of process to filter (e.g., 'pdf-to-text')
 
 **Query Parameters:**
 - `page` (optional, default: 1)
@@ -127,7 +127,7 @@ Authorization: Bearer <your-jwt-token>
     "userId": "507f191e810c19729de860ea",
     "userEmail": "user@example.com",
     "userName": "John Doe",
-    "processType": "pdf-to-text",
+    "folderId": "pdf-to-text",
     "filename": "resume.pdf",
     "parsedData": {
       "name": "Jane Smith",
@@ -185,7 +185,7 @@ async function getUserHistory(page = 1, limit = 20) {
 
 // Fetch only successful PDF conversions
 async function getSuccessfulPDFs() {
-  const response = await fetch('/history?processType=pdf-to-text&status=success', {
+  const response = await fetch('/history?folderId=pdf-to-text&status=success', {
     headers: {
       'Authorization': `Bearer ${token}`
     }
