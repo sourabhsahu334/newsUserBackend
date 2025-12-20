@@ -145,6 +145,57 @@ Authorization: Bearer <your-jwt-token>
 }
 ```
 
+### 4. Delete Single History Entry
+**Endpoint:** `DELETE /history/:id`
+
+**Authentication:** Required (JWT Token)
+
+**Path Parameters:**
+- `id` - MongoDB ObjectId of the history entry
+
+**Example Request:**
+```bash
+DELETE /history/507f1f77bcf86cd799439011
+Authorization: Bearer <your-jwt-token>
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "message": "History entry deleted successfully"
+}
+```
+
+### 5. Bulk Delete History
+**Endpoint:** `DELETE /history`
+
+**Authentication:** Required (JWT Token)
+
+**Query Parameters:**
+- `folderId` (optional) - Only delete history for a specific process type
+
+**Example Request (Delete All):**
+```bash
+DELETE /history
+Authorization: Bearer <your-jwt-token>
+```
+
+**Example Request (Delete by Folder):**
+```bash
+DELETE /history?folderId=pdf-to-text
+Authorization: Bearer <your-jwt-token>
+```
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "message": "Deleted 45 history entries",
+  "deletedCount": 45
+}
+```
+
 ## How It Works
 
 ### Automatic Tracking

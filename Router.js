@@ -602,6 +602,68 @@ router.get('/folders',
   }
 );
 
+// Delete a single history entry by ID
+router.delete('/history/:id',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+      const { ObjectId } = await import('mongodb');
+
+      const result = await historyCollection.deleteOne({
+        _id: new ObjectId(req.params.id),
+        userId: req.user._id
+      });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'History entry not found or unauthorized'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'History entry deleted successfully'
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Delete all history for the authenticated user (Bulk Delete)
+router.delete('/history',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+
+      const { folderId } = req.query;
+      const filter = { userId: req.user._id };
+
+      // Optional: Filter by folderId if provided
+      if (folderId) {
+        filter.folderId = folderId;
+      }
+
+      const result = await historyCollection.deleteMany(filter);
+
+      res.json({
+        success: true,
+        message: `Deleted ${result.deletedCount} history entries`,
+        deletedCount: result.deletedCount
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
 // Mount payment routes
 router.use('/api/payment', paymentRouter);
 
