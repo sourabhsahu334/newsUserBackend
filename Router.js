@@ -163,7 +163,7 @@ Return ONLY valid JSON.
 
             return {
               filename: file.originalname,
-              parsed_data: parsed
+              parsedData: parsed
             };
 
           } catch (err) {
@@ -596,6 +596,64 @@ router.get('/folders',
       res.status(500).json({
         success: false,
         message: 'Failed to fetch folders',
+        error: err.message
+      });
+    }
+  }
+);
+
+// Delete folder endpoint - removes folder name from user's folderTypes array
+router.post('/delete-folder',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const { folderName } = req.body;
+
+      // Validate folderName
+      if (!folderName || typeof folderName !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Folder name is required and must be a string'
+        });
+      }
+
+      const trimmedFolderName = folderName.trim();
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
+
+      // Remove folderName from user's folderTypes array using $pull
+      const result = await usersCollection.updateOne(
+        { _id: req.user._id },
+        {
+          $pull: { folderTypes: trimmedFolderName }
+        }
+      );
+
+      if (result.matchedCount === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      // Fetch updated user to return the updated folderTypes array
+      const updatedUser = await usersCollection.findOne(
+        { _id: req.user._id },
+        { projection: { folderTypes: 1 } }
+      );
+
+      res.json({
+        success: true,
+        message: 'Folder deleted successfully',
+        folderTypes: updatedUser.folderTypes || []
+      });
+
+    } catch (err) {
+      console.error('Error deleting folder:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to delete folder',
         error: err.message
       });
     }

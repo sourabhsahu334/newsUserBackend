@@ -78,6 +78,48 @@ Authorization: Bearer <your-jwt-token>
 
 ---
 
+### 3. Delete Folder
+**POST** `/delete-folder`
+
+Removes a folder name from the user's `folderTypes` array.
+
+#### Authentication
+Requires JWT token in the Authorization header:
+```
+Authorization: Bearer <your-jwt-token>
+```
+
+#### Request Body
+```json
+{
+  "folderName": "My Documents"
+}
+```
+
+#### Response (Success - 200)
+```json
+{
+  "success": true,
+  "message": "Folder deleted successfully",
+  "folderTypes": ["Work Files", "Personal"]
+}
+```
+
+#### Response (Error - 400)
+```json
+{
+  "success": false,
+  "message": "Folder name is required and must be a string"
+}
+```
+
+#### Features
+- **Specific Removal**: Uses MongoDB's `$pull` operator to remove the exact folder name string
+- **Validation**: Ensures folder name is a string
+- **Auto-trim**: Automatically trims whitespace from the input folder name before matching
+
+---
+
 ## Frontend Usage Examples
 
 ### Using Fetch API
@@ -135,6 +177,34 @@ const getFolders = async () => {
 
 // Usage
 const folders = await getFolders();
+
+#### Delete Folder
+```javascript
+const deleteFolder = async (folderName) => {
+  try {
+    const response = await fetch('https://your-api-url.com/delete-folder', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${yourJwtToken}`
+      },
+      body: JSON.stringify({ folderName })
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      console.log('Folder deleted successfully. Remaining folders:', data.folderTypes);
+    } else {
+      console.error('Error:', data.message);
+    }
+  } catch (error) {
+    console.error('Request failed:', error);
+  }
+};
+
+// Usage
+deleteFolder("My New Folder");
 ```
 
 ### Using Axios
@@ -178,6 +248,28 @@ const getFolders = async () => {
     );
     
     return response.data.folderTypes;
+  } catch (error) {
+    console.error('Error:', error.response?.data?.message || error.message);
+  }
+};
+
+#### Delete Folder
+```javascript
+import axios from 'axios';
+
+const deleteFolder = async (folderName) => {
+  try {
+    const response = await axios.post(
+      'https://your-api-url.com/delete-folder',
+      { folderName },
+      {
+        headers: {
+          'Authorization': `Bearer ${yourJwtToken}`
+        }
+      }
+    );
+    
+    console.log('Folder deleted. Remaining folders:', response.data.folderTypes);
   } catch (error) {
     console.error('Error:', error.response?.data?.message || error.message);
   }
