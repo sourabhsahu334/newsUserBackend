@@ -62,6 +62,7 @@ passport.use(
               accessToken: accessToken,
               refreshToken: refreshToken,
               credits: 100,
+              folderTypes: ["default"],
               googleGrantedScopes: grantedScopes,
               createdAt: new Date()
             };
@@ -348,6 +349,7 @@ router.post('/verify-otp', async (req, res) => {
           emailVerified: true,
           emailVerifiedAt: new Date(),
           credits: 100,
+          folderTypes: ["default"],
           createdAt: new Date()
         };
 
