@@ -188,7 +188,7 @@ Return ONLY valid JSON.
           userName: req.user.name || null,
           folderId: folderId,
           filename: result.filename,
-          parsedData: result.parsed_data || null,
+          parsedData: result.parsedData || null,
           error: result.error || null,
           status: result.error ? 'failed' : 'success',
           creditsUsed: 1,
