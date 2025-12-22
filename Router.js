@@ -701,13 +701,20 @@ router.delete('/history',
       const db = client.db('Interest');
       const historyCollection = db.collection('history');
 
-      const { folderId } = req.query;
-      const filter = { userId: req.user._id };
+      const { ids } = req.body;
+      const { ObjectId } = await import('mongodb');
 
-      // Optional: Filter by folderId if provided
-      if (folderId) {
-        filter.folderId = folderId;
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'An array of IDs is required for bulk deletion'
+        });
       }
+
+      const filter = {
+        userId: req.user._id,
+        _id: { $in: ids.map(id => new ObjectId(id)) }
+      };
 
       const result = await historyCollection.deleteMany(filter);
 
