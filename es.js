@@ -171,7 +171,14 @@ router.get('/logout', function (req, res) {
 });
 
 router.get('/me', authMiddleware.verifyToken, authMiddleware.getUserFromDB, function (req, res) {
-  res.json(req.user);
+  const user = req.user;
+  const totalCredits = (user.credits || []).reduce((sum, c) => sum + (c.amount || 0), 0);
+
+  res.json({
+    ...user,
+    credits: totalCredits,
+    creditDetails: user.credits
+  });
 });
 
 router.get('/isPremiumUser', authMiddleware.verifyToken, authMiddleware.getUserFromDB, function (req, res) {
