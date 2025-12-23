@@ -28,10 +28,26 @@ var getUserFromDB = function (req, res, next) {
     var usersCollection = db.collection('users');
 
     usersCollection.findOne({ _id: new ObjectId(req.user.id) })
-      .then(function (user) {
+      .then(async function (user) {
         if (!user) {
           return res.status(401).json({ error: 'User not found' });
         }
+
+        // Migration: convert numeric credits to array format
+        if (typeof user.credits === 'number') {
+          const creditArray = [{
+            amount: user.credits,
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Give old credits 30 days
+            createdAt: new Date()
+          }];
+
+          await usersCollection.updateOne(
+            { _id: user._id },
+            { $set: { credits: creditArray } }
+          );
+          user.credits = creditArray;
+        }
+
         req.user = user;
         next();
       })

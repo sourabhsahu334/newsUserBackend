@@ -221,11 +221,17 @@ router.post("/verify-payment-paypal", authMiddleware.verifyToken, authMiddleware
       createdAt: new Date()
     });
 
-    // Increment user credits by 250
+    // Add 250 credits with 30 days expiry
     await usersCollection.updateOne(
       { _id: req.user._id },
       {
-        $inc: { credits: 250 },
+        $push: {
+          credits: {
+            amount: 250,
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            createdAt: new Date()
+          }
+        },
         $set: { isPremium: true }
       }
     );
@@ -305,7 +311,13 @@ router.post('/verify-payment', authMiddleware.verifyToken, authMiddleware.getUse
           await usersCollection.updateOne(
             { _id: userId },
             {
-              $inc: { credits: 250 },
+              $push: {
+                credits: {
+                  amount: 250,
+                  expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                  createdAt: new Date()
+                }
+              },
               $set: { isPremium: true }
             }
           );

@@ -88,21 +88,49 @@ router.post(
 
       const pdfCount = req.files.length;
 
-      if (req.user.credits < pdfCount) {
+      // Sum valid (non-expired) credits
+      const now = new Date();
+      const validCredits = (req.user.credits || []).filter(c => new Date(c.expiresAt) > now);
+      const totalCredits = validCredits.reduce((sum, c) => sum + c.amount, 0);
+
+      if (totalCredits < pdfCount) {
         return res.status(402).json({
           success: false,
-          message: `Not enough credits`
+          message: `Not enough credits. Available: ${totalCredits}, Required: ${pdfCount}`
         });
       }
 
-      // 🔥 Deduct credits first
+      // 🔥 Deduct credits sequentially starting from blocks expiring soonest
       const db = client.db('Interest');
       const usersCollection = db.collection('users');
 
+      // Sort by expiry date ascending
+      let credits = [...(req.user.credits || [])].sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
+      let remainingToDeduct = pdfCount;
+
+      for (let i = 0; i < credits.length && remainingToDeduct > 0; i++) {
+        if (new Date(credits[i].expiresAt) <= now) continue; // Skip expired
+
+        if (credits[i].amount <= remainingToDeduct) {
+          remainingToDeduct -= credits[i].amount;
+          credits[i].amount = 0;
+        } else {
+          credits[i].amount -= remainingToDeduct;
+          remainingToDeduct = 0;
+        }
+      }
+
+      // Filter out empty and expired blocks
+      const updatedCredits = credits.filter(c => c.amount > 0 && new Date(c.expiresAt) > now);
+
       await usersCollection.updateOne(
         { _id: req.user._id },
-        { $inc: { credits: -pdfCount } }
+        { $set: { credits: updatedCredits } }
       );
+
+      // Update req.user for subsequent use in the same request if needed
+      req.user.credits = updatedCredits;
+      const currentTotalCredits = updatedCredits.reduce((sum, c) => sum + (c.amount || 0), 0);
 
       const model = genAI.getGenerativeModel({
         model: "gemini-2.0-flash",
@@ -195,7 +223,7 @@ Return ONLY valid JSON.
           timestamp: new Date(),
           metadata: {
             totalFiles: pdfCount,
-            remainingCredits: req.user.credits - pdfCount
+            remainingCredits: currentTotalCredits
           }
         }));
 

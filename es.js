@@ -61,7 +61,11 @@ passport.use(
               name: profile.displayName,
               accessToken: accessToken,
               refreshToken: refreshToken,
-              credits: 100,
+              credits: [{
+                amount: 100,
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                createdAt: new Date()
+              }],
               folderTypes: ["default"],
               googleGrantedScopes: grantedScopes,
               createdAt: new Date()
@@ -348,7 +352,11 @@ router.post('/verify-otp', async (req, res) => {
           email: email,
           emailVerified: true,
           emailVerifiedAt: new Date(),
-          credits: 100,
+          credits: [{
+            amount: 100,
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            createdAt: new Date()
+          }],
           folderTypes: ["default"],
           createdAt: new Date()
         };
@@ -387,7 +395,8 @@ router.post('/verify-otp', async (req, res) => {
           email: user.email,
           name: user.name || null,
           emailVerified: user.emailVerified,
-          credits: user.credits
+          credits: (user.credits || []).reduce((sum, c) => sum + (c.amount || 0), 0),
+          creditDetails: user.credits
         }
       });
     } else {
@@ -600,7 +609,8 @@ router.post('/login', async (req, res) => {
         email: user.email,
         name: user.name || null,
         emailVerified: user.emailVerified,
-        credits: user.credits
+        credits: (user.credits || []).reduce((sum, c) => sum + (c.amount || 0), 0),
+        creditDetails: user.credits
       }
     });
 
