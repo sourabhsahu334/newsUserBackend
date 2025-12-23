@@ -97,7 +97,7 @@ export async function getPayPalAccessToken() {
 }
 
 
-router.post("/create-order-paypal", async (req, res) => {
+router.post("/create-order-paypal", authMiddleware.verifyToken, authMiddleware.getUserFromDB, async (req, res) => {
   try {
     const { amount, currency = "USD", planName } = req.body;
 
@@ -131,18 +131,40 @@ router.post("/create-order-paypal", async (req, res) => {
     );
 
     const order = await response.json();
+
+    if (!response.ok) {
+      throw new Error(order.message || "Order creation failed");
+    }
+
+    // Store order in database for tracking
+    const db = client.db('Interest');
+    const ordersCollection = db.collection('orders');
+
+    await ordersCollection.insertOne({
+      orderId: order.id,
+      userId: req.user._id,
+      userEmail: req.user.email,
+      amount: amount * 100, // keep consistent with Razorpay (paise/cents)
+      currency: currency,
+      planName: planName,
+      status: 'created',
+      provider: 'paypal',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
     res.json({ order });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Order creation failed" });
+    res.status(500).json({ error: err.message || "Order creation failed" });
   }
 });
 
 /* =========================
    CAPTURE PAYMENT
 ========================= */
-router.post("/verify-payment-paypal", async (req, res) => {
+router.post("/verify-payment-paypal", authMiddleware.verifyToken, authMiddleware.getUserFromDB, async (req, res) => {
   try {
     const { orderId } = req.body;
 
@@ -158,6 +180,7 @@ router.post("/verify-payment-paypal", async (req, res) => {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
         },
       }
     );
@@ -169,17 +192,53 @@ router.post("/verify-payment-paypal", async (req, res) => {
     }
 
     // ✅ SUCCESS POINT
-    // Add credits / activate plan / store transaction
+    const db = client.db('Interest');
+    const ordersCollection = db.collection('orders');
+    const paymentsCollection = db.collection('payments');
+    const usersCollection = db.collection('users');
+
+    const transactionId = data.purchase_units[0].payments.captures[0].id;
+
+    // Update order status
+    await ordersCollection.updateOne(
+      { orderId: orderId },
+      {
+        $set: {
+          status: 'paid',
+          paymentId: transactionId,
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    // Store payment details
+    await paymentsCollection.insertOne({
+      orderId: orderId,
+      paymentId: transactionId,
+      status: 'verified',
+      provider: 'paypal',
+      data: data,
+      createdAt: new Date()
+    });
+
+    // Increment user credits by 250
+    await usersCollection.updateOne(
+      { _id: req.user._id },
+      {
+        $inc: { credits: 250 },
+        $set: { isPremium: true }
+      }
+    );
 
     res.json({
       success: true,
-      transactionId:
-        data.purchase_units[0].payments.captures[0].id,
+      transactionId: transactionId,
+      message: 'Payment verified successfully and credits added'
     });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Payment capture failed" });
+    res.status(500).json({ error: err.message || "Payment capture failed" });
   }
 });
 
@@ -247,7 +306,7 @@ router.post('/verify-payment', authMiddleware.verifyToken, authMiddleware.getUse
             { _id: userId },
             {
               $inc: { credits: 250 },
-              $set: { iisPremium: true }
+              $set: { isPremium: true }
             }
           );
 
