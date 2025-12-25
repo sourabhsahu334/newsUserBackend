@@ -87,6 +87,8 @@ const getInbox = async (req, res) => {
         const messages = listResponse.data.messages || [];
         const nextPageToken = listResponse.data.nextPageToken;
 
+        console.log(`📧 Fetched ${messages.length} messages from Gmail`);
+
         if (!messages.length) {
             return res.json({ messages: [], nextPageToken: null });
         }
@@ -140,8 +142,13 @@ const getInbox = async (req, res) => {
 
             traverseParts(parts);
 
+            console.log(`📎 Email "${subject.substring(0, 50)}..." has ${attachments.length} attachments`);
+
             // Skip if no valid resume attachments
-            if (attachments.length === 0) continue;
+            if (attachments.length === 0) {
+                console.log(`⏭️  Skipped (no attachments)`);
+                continue;
+            }
 
             // Confidence score
             const filenames = attachments.map(a => a.filename).join(' ');
@@ -150,8 +157,15 @@ const getInbox = async (req, res) => {
                 calculateScore(snippet) +
                 calculateScore(filenames);
 
-            // Threshold (tuneable)
-            if (score < 2) continue;
+            console.log(`🎯 Confidence score: ${score} (threshold: 1)`);
+
+            // Threshold (tuneable) - lowered to 1 to catch more resume emails
+            if (score < 1) {
+                console.log(`⏭️  Skipped (score too low)`);
+                continue;
+            }
+
+            console.log(`✅ Email added to results`);
 
             resumeEmails.push({
                 id: msg.id,
