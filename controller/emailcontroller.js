@@ -55,11 +55,13 @@ const getInbox = async (req, res) => {
         const timeRange = req.query.timeRange; // e.g., '24h', '7d', '30d', '1y'
 
         // Map timeRange to Gmail's newer_than format
+        // Gmail newer_than uses: d (days), m (months), y (years)
+        // Note: Gmail doesn't support hours directly, 1d is the minimum
         const timeFilterMap = {
-            '24h': '1d',
-            '7d': '7d',
-            '30d': '1m',
-            '1y': '1y'
+            '24h': '1d',   // Last 24 hours -> 1 day
+            '7d': '7d',    // Last 7 days
+            '30d': '1m',   // Last month -> 1 month
+            '1y': '1y'     // Last year
         };
 
         // Build the base query
@@ -69,6 +71,9 @@ const getInbox = async (req, res) => {
         if (timeRange && timeFilterMap[timeRange]) {
             query += ` newer_than:${timeFilterMap[timeRange]}`;
         }
+
+        console.log(`🔍 Gmail Query: ${query}`);
+        console.log(`⏰ Time Range: ${timeRange || 'none'}`);
 
         /**
          * Gmail advanced search:
