@@ -22,7 +22,7 @@ import { getInbox, sendEmail } from './controller/emailcontroller.js';
 ================================ */
 var GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 var GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-var GOOGLE_CALLBACK_URL = 'https://www.neukaps.com/auth/google/callback';
+var GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'https://www.neukaps.com/auth/google/callback';
 var GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 var JWT_SECRET = appConfig.JWT_SECRET;
 var FRONTEND_URL = appConfig.FRONTEND_URL;
@@ -153,6 +153,7 @@ router.get(
 
 router.get('/google/callback', function (req, res, next) {
   passport.authenticate('google', { session: false }, function (err, user) {
+    console.log(err, user)
     if (err || !user) return res.redirect('/auth/failure');
 
     var token = jwt.sign(

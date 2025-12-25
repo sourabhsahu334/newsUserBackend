@@ -52,18 +52,36 @@ const getInbox = async (req, res) => {
         const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
         const pageToken = req.query.pageToken;
+        const timeRange = req.query.timeRange; // e.g., '24h', '7d', '30d', '1y'
+
+        // Map timeRange to Gmail's newer_than format
+        const timeFilterMap = {
+            '24h': '1d',
+            '7d': '7d',
+            '30d': '1m',
+            '1y': '1y'
+        };
+
+        // Build the base query
+        let query = '-from:me has:attachment (filename:pdf OR filename:doc OR filename:docx) (resume OR cv OR "job application" OR hiring)';
+
+        // Add time filter if provided
+        if (timeRange && timeFilterMap[timeRange]) {
+            query += ` newer_than:${timeFilterMap[timeRange]}`;
+        }
 
         /**
          * Gmail advanced search:
          * - has attachment
          * - pdf/doc/docx
          * - resume related keywords
+         * - optional time filter
          */
         const listResponse = await gmail.users.messages.list({
             userId: 'me',
             maxResults: 10,
             pageToken: pageToken,
-            q: '-from:me has:attachment (filename:pdf OR filename:doc OR filename:docx) (resume OR cv OR "job application" OR hiring)'
+            q: query
         });
 
         const messages = listResponse.data.messages || [];
