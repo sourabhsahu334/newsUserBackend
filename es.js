@@ -14,6 +14,7 @@ import authMiddleware from './middleware/authMiddleware.js';
 
 const router = express.Router();
 import { getInbox, sendEmail } from './controller/emailcontroller.js';
+import { processResumes } from './controller/resumeProcessor.js';
 
 
 
@@ -193,6 +194,7 @@ router.get('/isPremiumUser', authMiddleware.verifyToken, authMiddleware.getUserF
 
 router.get('/gmail/inbox', authMiddleware.verifyToken, getInbox);
 router.post('/gmail/send', authMiddleware.verifyToken, sendEmail);
+router.post('/process-resumes', authMiddleware.verifyToken, processResumes);
 
 /* ==============================
    EMAIL OTP VERIFICATION
