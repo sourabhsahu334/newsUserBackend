@@ -562,6 +562,14 @@ router.post('/create-folder',
       const db = client.db('Interest');
       const usersCollection = db.collection('users');
 
+      // Check if folder name already exists
+      if (req.user.folderTypes && req.user.folderTypes.includes(trimmedFolderName)) {
+        return res.status(405).json({
+          success: false,
+          message: 'folder already exist'
+        });
+      }
+
       // Add folderName to user's folderTypes array using $addToSet to prevent duplicates
       const result = await usersCollection.updateOne(
         { _id: req.user._id },
