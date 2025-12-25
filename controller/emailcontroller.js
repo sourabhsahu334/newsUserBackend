@@ -52,36 +52,14 @@ const getInbox = async (req, res) => {
         const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
         const pageToken = req.query.pageToken;
-        const timeRange = req.query.timeRange; // e.g., '24h', '7d', '30d', '1y'
 
-        // Map timeRange to Gmail's newer_than format
-        // Gmail newer_than uses: d (days), m (months), y (years)
-        // Note: Gmail doesn't support hours directly, 1d is the minimum
-        const timeFilterMap = {
-            '24h': '1d',   // Last 24 hours -> 1 day
-            '7d': '7d',    // Last 7 days
-            '30d': '1m',   // Last month -> 1 month
-            '1y': '1y'     // Last year
-        };
+        console.log(`📥 Request: pageToken=${pageToken}`);
 
-        // Build the base query
-        let query = '-from:me has:attachment (filename:pdf OR filename:doc OR filename:docx) (resume OR cv OR "job application" OR hiring)';
+        // Build the query
+        const query = '-from:me has:attachment (filename:pdf OR filename:doc OR filename:docx) (resume OR cv OR "job application" OR hiring)';
 
-        // Add time filter if provided
-        if (timeRange && timeFilterMap[timeRange]) {
-            query += ` newer_than:${timeFilterMap[timeRange]}`;
-        }
+        console.log(` Gmail Query: "${query}"`);
 
-        console.log(`🔍 Gmail Query: ${query}`);
-        console.log(`⏰ Time Range: ${timeRange || 'none'}`);
-
-        /**
-         * Gmail advanced search:
-         * - has attachment
-         * - pdf/doc/docx
-         * - resume related keywords
-         * - optional time filter
-         */
         const listResponse = await gmail.users.messages.list({
             userId: 'me',
             maxResults: 10,
@@ -116,6 +94,8 @@ const getInbox = async (req, res) => {
             const from = getHeader('From');
             const date = getHeader('Date');
             const snippet = details.data.snippet || '';
+
+            console.log(`✉️ Found: "${subject}" | Date: ${date} | ID: ${msg.id}`);
 
             // Extract attachments
             const parts = payload.parts || [];
@@ -154,7 +134,6 @@ const getInbox = async (req, res) => {
                 console.log(`⏭️  Skipped (no attachments)`);
                 continue;
             }
-
             // Confidence score
             const filenames = attachments.map(a => a.filename).join(' ');
             const score =
