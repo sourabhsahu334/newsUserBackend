@@ -90,6 +90,86 @@ const processResumes = async (req, res) => {
         const oAuth2Client = getOAuth2Client(user);
         const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
+        // First, count how many PDFs we'll process to calculate credits needed
+        let totalPDFCount = 0;
+        for (const email of emails) {
+            try {
+                const messageDetails = await gmail.users.messages.get({
+                    userId: 'me',
+                    id: email.id
+                });
+
+                const payload = messageDetails.data.payload;
+                const parts = payload.parts || [];
+
+                const countPDFs = (partsArray) => {
+                    let count = 0;
+                    for (const part of partsArray) {
+                        if (
+                            part.filename &&
+                            part.body?.attachmentId &&
+                            part.mimeType === 'application/pdf'
+                        ) {
+                            count++;
+                        }
+                        if (part.parts) {
+                            count += countPDFs(part.parts);
+                        }
+                    }
+                    return count;
+                };
+
+                totalPDFCount += countPDFs(parts);
+            } catch (err) {
+                console.error(`Error counting PDFs in email ${email.id}:`, err.message);
+            }
+        }
+
+        console.log(`📊 Total PDFs to process: ${totalPDFCount}`);
+
+        // Check and deduct credits
+        const now = new Date();
+        const validCredits = (user.credits || []).filter(c => new Date(c.expiresAt) > now);
+        const totalCredits = validCredits.reduce((sum, c) => sum + c.amount, 0);
+
+        if (totalCredits < totalPDFCount) {
+            return res.status(402).json({
+                success: false,
+                error: 'INSUFFICIENT_CREDITS',
+                message: `Not enough credits. Available: ${totalCredits}, Required: ${totalPDFCount}`
+            });
+        }
+
+        // Deduct credits sequentially starting from blocks expiring soonest
+        let credits = [...(user.credits || [])].sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
+        let remainingToDeduct = totalPDFCount;
+
+        for (let i = 0; i < credits.length && remainingToDeduct > 0; i++) {
+            if (new Date(credits[i].expiresAt) <= now) continue; // Skip expired
+
+            if (credits[i].amount <= remainingToDeduct) {
+                remainingToDeduct -= credits[i].amount;
+                credits[i].amount = 0;
+            } else {
+                credits[i].amount -= remainingToDeduct;
+                remainingToDeduct = 0;
+            }
+        }
+
+        // Filter out empty and expired blocks
+        const updatedCredits = credits.filter(c => c.amount > 0 && new Date(c.expiresAt) > now);
+
+        await usersCollection.updateOne(
+            { _id: user._id },
+            { $set: { credits: updatedCredits } }
+        );
+
+        // Update user object for subsequent use
+        user.credits = updatedCredits;
+        const currentTotalCredits = updatedCredits.reduce((sum, c) => sum + (c.amount || 0), 0);
+
+        console.log(`💳 Credits deducted: ${totalPDFCount}, Remaining: ${currentTotalCredits}`);
+
         const results = [];
 
         // Process each email
@@ -238,10 +318,12 @@ Return ONLY valid JSON.
                 status: result.status,
                 emailId: result.emailId,
                 emailSubject: result.emailSubject,
+                creditsUsed: 1, // 1 credit per PDF processed
                 timestamp: new Date(),
                 metadata: {
                     source: 'gmail',
-                    totalProcessed: results.length
+                    totalProcessed: results.length,
+                    remainingCredits: currentTotalCredits
                 }
             }));
 
@@ -253,7 +335,9 @@ Return ONLY valid JSON.
         return res.json({
             success: true,
             message: `Processed ${results.length} resumes`,
-            results
+            results,
+            creditsUsed: totalPDFCount,
+            remainingCredits: currentTotalCredits
         });
 
     } catch (err) {
