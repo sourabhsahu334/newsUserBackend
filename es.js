@@ -15,6 +15,7 @@ import authMiddleware from './middleware/authMiddleware.js';
 const router = express.Router();
 import { getInbox, sendEmail } from './controller/emailcontroller.js';
 import { processResumes } from './controller/resumeProcessor.js';
+import { microsoftAuth, microsoftCallback, getOutlookInbox } from './controller/microsoftController.js';
 
 
 
@@ -71,6 +72,14 @@ passport.use(
               googleGrantedScopes: grantedScopes,
               createdAt: new Date()
             };
+
+            // Check for Gmail specific scope
+            if (grantedScopes.some(s => s.includes('gmail.readonly'))) {
+              newUser.gmailAccessToken = accessToken;
+              newUser.gmailRefreshToken = refreshToken;
+              newUser.gmailGrantedScopes = grantedScopes;
+            }
+
             return usersCollection.insertOne(newUser)
               .then(function (result) {
                 return usersCollection.findOne({ _id: result.insertedId });
@@ -83,6 +92,14 @@ passport.use(
               googleGrantedScopes: grantedScopes,
               updatedAt: new Date()
             };
+
+            // Check for Gmail specific scope
+            if (grantedScopes.some(s => s.includes('gmail.readonly'))) {
+              updateData.gmailAccessToken = accessToken;
+              updateData.gmailRefreshToken = refreshToken;
+              updateData.gmailGrantedScopes = grantedScopes;
+            }
+
             return usersCollection.updateOne(
               { _id: user._id },
               { $set: updateData }
@@ -152,6 +169,9 @@ router.get(
   })
 );
 
+router.get('/microsoft', microsoftAuth);
+router.get('/microsoft/callback', microsoftCallback);
+
 router.get('/google/callback', function (req, res, next) {
   passport.authenticate('google', { session: false }, function (err, user) {
     console.log(err, user)
@@ -194,6 +214,7 @@ router.get('/isPremiumUser', authMiddleware.verifyToken, authMiddleware.getUserF
 
 router.get('/gmail/inbox', authMiddleware.verifyToken, getInbox);
 router.post('/gmail/send', authMiddleware.verifyToken, sendEmail);
+router.get('/microsoft/inbox', authMiddleware.verifyToken, getOutlookInbox);
 router.post('/process-resumes', authMiddleware.verifyToken, processResumes);
 
 /* ==============================

@@ -13,6 +13,9 @@ const userSchema = new mongoose.Schema({
   msIdToken: String,
   msGrantedScopes: [String],
   googleGrantedScopes: [String],
+  gmailAccessToken: String,
+  gmailRefreshToken: String,
+  gmailGrantedScopes: [String],
   zoomId: { type: String, unique: false, sparse: true },
   zoomEmail: String,
   zoomAccessToken: String,
@@ -34,10 +37,10 @@ const userSchema = new mongoose.Schema({
   metaEmail: String,
   metaAccessToken: String,
   metaGrantedScopes: [String],
-  metaPageTokens: [{ 
-    pageId: String, 
-    pageName: String, 
-    accessToken: String 
+  metaPageTokens: [{
+    pageId: String,
+    pageName: String,
+    accessToken: String
   }],
   passwordHash: String,
 });

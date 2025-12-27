@@ -3,6 +3,7 @@ import { client } from '../db/connect.js';
 import { ObjectId } from 'mongodb';
 import getOAuth2Client from '../services/googleService.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { callGraphApiWithRefresh } from '../services/microsoftService.js';
 
 const genAI = new GoogleGenerativeAI(process.env.API_KEY);
 
@@ -78,7 +79,10 @@ const processResumes = async (req, res) => {
             });
         }
 
-        const { emails } = req.body;
+        const { emails, provider: initialProvider = 'google' } = req.body;
+
+        console.log(`[Processor] Initial request provider: ${initialProvider}`);
+        console.log(`[Processor] Number of emails to process: ${emails?.length || 0}`);
 
         if (!emails || !Array.isArray(emails) || emails.length === 0) {
             return res.status(400).json({
@@ -87,39 +91,59 @@ const processResumes = async (req, res) => {
             });
         }
 
-        const oAuth2Client = getOAuth2Client(user);
-        const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+        // Initialize both clients if possible, we'll decide which to use per email
+        const gmail = (initialProvider === 'google' || emails.some(e => !e.id.startsWith('AQMk')))
+            ? google.gmail({ version: 'v1', auth: getOAuth2Client(user) })
+            : null;
 
         // First, count how many PDFs we'll process to calculate credits needed
         let totalPDFCount = 0;
+
         for (const email of emails) {
             try {
-                const messageDetails = await gmail.users.messages.get({
-                    userId: 'me',
-                    id: email.id
-                });
+                // Auto-detect provider per email
+                const effectiveProvider = email.id.startsWith('AQMk') ? 'microsoft' : 'google';
 
-                const payload = messageDetails.data.payload;
-                const parts = payload.parts || [];
-
-                const countPDFs = (partsArray) => {
-                    let count = 0;
-                    for (const part of partsArray) {
-                        if (
-                            part.filename &&
-                            part.body?.attachmentId &&
-                            part.mimeType === 'application/pdf'
-                        ) {
-                            count++;
-                        }
-                        if (part.parts) {
-                            count += countPDFs(part.parts);
-                        }
+                if (effectiveProvider === 'microsoft') {
+                    if (!user.msAccessToken) {
+                        throw new Error('Microsoft access token missing for Microsoft email');
                     }
-                    return count;
-                };
+                    const response = await callGraphApiWithRefresh(user._id, user.msAccessToken, user.msRefreshToken, `/me/messages/${email.id}?$expand=attachments`);
+                    const attachments = response.attachments || [];
+                    totalPDFCount += attachments.filter(att =>
+                        att.contentType === 'application/pdf'
+                    ).length;
+                } else {
+                    if (!gmail) {
+                        throw new Error('Gmail client not initialized for Google email');
+                    }
+                    const messageDetails = await gmail.users.messages.get({
+                        userId: 'me',
+                        id: email.id
+                    });
 
-                totalPDFCount += countPDFs(parts);
+                    const payload = messageDetails.data.payload;
+                    const parts = payload.parts || [];
+
+                    const countPDFs = (partsArray) => {
+                        let count = 0;
+                        for (const part of partsArray) {
+                            if (
+                                part.filename &&
+                                part.body?.attachmentId &&
+                                part.mimeType === 'application/pdf'
+                            ) {
+                                count++;
+                            }
+                            if (part.parts) {
+                                count += countPDFs(part.parts);
+                            }
+                        }
+                        return count;
+                    };
+
+                    totalPDFCount += countPDFs(parts);
+                }
             } catch (err) {
                 console.error(`Error counting PDFs in email ${email.id}:`, err.message);
             }
@@ -175,56 +199,88 @@ const processResumes = async (req, res) => {
         // Process each email
         for (const email of emails) {
             try {
-                // Get email details to access attachments
-                const messageDetails = await gmail.users.messages.get({
-                    userId: 'me',
-                    id: email.id
-                });
+                let resumeAttachments = [];
+                const effectiveProvider = email.id.startsWith('AQMk') ? 'microsoft' : 'google';
 
-                const payload = messageDetails.data.payload;
-                const parts = payload.parts || [];
-
-                // Find PDF/DOC attachments
-                const resumeAttachments = [];
-                const traverseParts = (partsArray) => {
-                    for (const part of partsArray) {
-                        if (
-                            part.filename &&
-                            part.body?.attachmentId &&
-                            (
-                                part.mimeType === 'application/pdf' ||
-                                part.mimeType === 'application/msword' ||
-                                part.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                            )
-                        ) {
-                            resumeAttachments.push({
-                                filename: part.filename,
-                                mimeType: part.mimeType,
-                                attachmentId: part.body.attachmentId
-                            });
-                        }
-
-                        if (part.parts) {
-                            traverseParts(part.parts);
-                        }
+                if (effectiveProvider === 'microsoft') {
+                    if (!user.msAccessToken) {
+                        throw new Error('Microsoft access token missing');
                     }
-                };
+                    const response = await callGraphApiWithRefresh(user._id, user.msAccessToken, user.msRefreshToken, `/me/messages/${email.id}?$expand=attachments`);
+                    resumeAttachments = (response.attachments || [])
+                        .filter(att =>
+                            att.contentType === 'application/pdf' ||
+                            att.contentType === 'application/msword' ||
+                            att.contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        )
+                        .map(att => ({
+                            filename: att.name,
+                            mimeType: att.contentType,
+                            attachmentId: att.id,
+                            contentBytes: att.contentBytes // Microsoft provides this for file attachments
+                        }));
+                } else {
+                    if (!gmail) {
+                        throw new Error('Gmail client not initialized');
+                    }
+                    // Get email details to access attachments
+                    const messageDetails = await gmail.users.messages.get({
+                        userId: 'me',
+                        id: email.id
+                    });
 
-                traverseParts(parts);
+                    const payload = messageDetails.data.payload;
+                    const parts = payload.parts || [];
+
+                    const traverseParts = (partsArray) => {
+                        for (const part of partsArray) {
+                            if (
+                                part.filename &&
+                                part.body?.attachmentId &&
+                                (
+                                    part.mimeType === 'application/pdf' ||
+                                    part.mimeType === 'application/msword' ||
+                                    part.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                                )
+                            ) {
+                                resumeAttachments.push({
+                                    filename: part.filename,
+                                    mimeType: part.mimeType,
+                                    attachmentId: part.body.attachmentId
+                                });
+                            }
+
+                            if (part.parts) {
+                                traverseParts(part.parts);
+                            }
+                        }
+                    };
+                    traverseParts(parts);
+                }
 
                 // Process only PDF attachments with Gemini
                 for (const attachment of resumeAttachments) {
                     if (attachment.mimeType === 'application/pdf') {
                         try {
-                            // Download attachment
-                            const attachmentData = await gmail.users.messages.attachments.get({
-                                userId: 'me',
-                                messageId: email.id,
-                                id: attachment.attachmentId
-                            });
-
-                            // Decode base64 data
-                            const buffer = Buffer.from(attachmentData.data.data, 'base64');
+                            // Decode base64 data to buffer
+                            let buffer;
+                            if (effectiveProvider === 'microsoft') {
+                                if (!attachment.contentBytes) {
+                                    // Fallback: fetch specific attachment if content was missing
+                                    const attDetail = await callGraphApiWithRefresh(user._id, user.msAccessToken, user.msRefreshToken, `/me/messages/${email.id}/attachments/${attachment.attachmentId}`);
+                                    buffer = Buffer.from(attDetail.contentBytes, 'base64');
+                                } else {
+                                    buffer = Buffer.from(attachment.contentBytes, 'base64');
+                                }
+                            } else {
+                                // Download attachment from Gmail
+                                const attachmentData = await gmail.users.messages.attachments.get({
+                                    userId: 'me',
+                                    messageId: email.id,
+                                    id: attachment.attachmentId
+                                });
+                                buffer = Buffer.from(attachmentData.data.data, 'base64');
+                            }
 
                             // Process with Gemini
                             const model = genAI.getGenerativeModel({
@@ -311,7 +367,7 @@ Return ONLY valid JSON.
                 userId: user._id,
                 userEmail: user.email,
                 userName: user.name || null,
-                folderId: 'gmail-resumes',
+                folderId: 'default',
                 filename: result.filename || 'N/A',
                 parsedData: result.parsedData || null,
                 error: result.error || null,
@@ -321,7 +377,7 @@ Return ONLY valid JSON.
                 creditsUsed: 1, // 1 credit per PDF processed
                 timestamp: new Date(),
                 metadata: {
-                    source: 'gmail',
+                    source: initialProvider,
                     totalProcessed: results.length,
                     remainingCredits: currentTotalCredits
                 }

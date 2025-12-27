@@ -7,8 +7,8 @@ const getOAuth2Client = (user) => {
     process.env.GOOGLE_REDIRECT_URI
   );
   oAuth2Client.setCredentials({
-    access_token: user.accessToken,
-    refresh_token: user.refreshToken
+    access_token: user.gmailAccessToken || user.accessToken,
+    refresh_token: user.gmailRefreshToken || user.refreshToken
   });
   return oAuth2Client;
 };
