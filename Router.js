@@ -205,7 +205,8 @@ Return ONLY valid JSON.
 
       const results = await Promise.all(tasks);
 
-      const { folderId = 'pdf-to-text' } = req.body;
+      let { folderId = 'pdf-to-text' } = req.body;
+      const folderIdArray = Array.isArray(folderId) ? folderId : [folderId];
 
       // 🔥 Save history for each processed document if user is premium
       if (req.user.isPremium) {
@@ -214,7 +215,7 @@ Return ONLY valid JSON.
           userId: req.user._id,
           userEmail: req.user.email,
           userName: req.user.name || null,
-          folderId: folderId,
+          folderId: folderIdArray,
           filename: result.filename,
           parsedData: result.parsedData || null,
           error: result.error || null,
@@ -343,7 +344,7 @@ router.get('/history',
 
       // Build query filter
       const filter = { userId: req.user._id };
-      if (folderId) filter.folderId = folderId;
+      if (folderId) filter.folderId = Array.isArray(folderId) ? { $in: folderId } : folderId;
       if (status) filter.status = status;
 
       console.log('Filter being used:', filter);
@@ -392,7 +393,7 @@ router.get('/history/:folderId',
       const history = await historyCollection
         .find({
           userId: req.user._id,
-          folderId: folderId
+          folderId: Array.isArray(folderId) ? { $in: folderId } : folderId
         })
         .sort({ timestamp: -1 })
         .skip(skip)
@@ -482,7 +483,7 @@ router.post('/search-history',
 
       // Add folderId filter if provided
       if (folderId) {
-        baseFilter.folderId = folderId;
+        baseFilter.folderId = Array.isArray(folderId) ? { $in: folderId } : folderId;
       }
 
       // Build search filter with $or for multiple fields

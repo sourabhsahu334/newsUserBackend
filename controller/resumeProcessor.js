@@ -367,7 +367,7 @@ Return ONLY valid JSON.
                 userId: user._id,
                 userEmail: user.email,
                 userName: user.name || null,
-                folderId: 'default',
+                folderId: ['default'],
                 filename: result.filename || 'N/A',
                 parsedData: result.parsedData || null,
                 error: result.error || null,

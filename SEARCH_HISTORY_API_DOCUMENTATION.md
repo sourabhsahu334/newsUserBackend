@@ -43,7 +43,7 @@ Authorization: Bearer <your-jwt-token>
       "_id": "...",
       "userId": "...",
       "userEmail": "user@example.com",
-      "folderId": "my-folder",
+      "folderId": ["my-folder"],
       "filename": "resume.pdf",
       "parsedData": {
         "name": "John Doe",
