@@ -707,12 +707,20 @@ router.delete('/history/:id',
       const historyCollection = db.collection('history');
       const { ObjectId } = await import('mongodb');
 
-      const result = await historyCollection.deleteOne({
-        _id: new ObjectId(req.params.id),
-        userId: req.user._id
-      });
+      const { folderId } = req.body;
+      if (!folderId) {
+        return res.status(400).json({ success: false, message: 'folderId is required' });
+      }
 
-      if (result.deletedCount === 0) {
+      const result = await historyCollection.updateOne(
+        {
+          _id: new ObjectId(req.params.id),
+          userId: req.user._id
+        },
+        { $pull: { folderId: folderId } }
+      );
+
+      if (result.matchedCount === 0) {
         return res.status(404).json({
           success: false,
           message: 'History entry not found or unauthorized'
@@ -721,7 +729,7 @@ router.delete('/history/:id',
 
       res.json({
         success: true,
-        message: 'History entry deleted successfully'
+        message: `History entry removed from ${folderId}`
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -738,13 +746,13 @@ router.delete('/history',
       const db = client.db('Interest');
       const historyCollection = db.collection('history');
 
-      const { ids } = req.body;
+      const { ids, folderId } = req.body;
       const { ObjectId } = await import('mongodb');
 
-      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      if (!ids || !Array.isArray(ids) || ids.length === 0 || !folderId) {
         return res.status(400).json({
           success: false,
-          message: 'An array of IDs is required for bulk deletion'
+          message: 'An array of IDs and folderId are required'
         });
       }
 
@@ -753,12 +761,14 @@ router.delete('/history',
         _id: { $in: ids.map(id => new ObjectId(id)) }
       };
 
-      const result = await historyCollection.deleteMany(filter);
+      const result = await historyCollection.updateMany(filter, {
+        $pull: { folderId: folderId }
+      });
 
       res.json({
         success: true,
-        message: `Deleted ${result.deletedCount} history entries`,
-        deletedCount: result.deletedCount
+        message: `Removed ${result.modifiedCount} history entries from ${folderId}`,
+        modifiedCount: result.modifiedCount
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
