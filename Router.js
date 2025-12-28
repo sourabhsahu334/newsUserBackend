@@ -766,6 +766,81 @@ router.delete('/history',
   }
 );
 
+// Copy history entries to another folder
+router.post('/copy-history',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const { ids, targetFolder } = req.body;
+      if (!ids || !Array.isArray(ids) || !targetFolder) {
+        return res.status(400).json({ success: false, message: 'IDs and targetFolder are required' });
+      }
+
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+      const { ObjectId } = await import('mongodb');
+
+      const result = await historyCollection.updateMany(
+        {
+          _id: { $in: ids.map(id => new ObjectId(id)) },
+          userId: req.user._id
+        },
+        { $addToSet: { folderId: targetFolder } }
+      );
+
+      res.json({
+        success: true,
+        message: `Copied ${result.modifiedCount} entries to ${targetFolder}`,
+        modifiedCount: result.modifiedCount
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Move history entries from one folder to another
+router.post('/move-history',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const { ids, sourceFolder, targetFolder } = req.body;
+      if (!ids || !Array.isArray(ids) || !sourceFolder || !targetFolder) {
+        return res.status(400).json({ success: false, message: 'IDs, sourceFolder, and targetFolder are required' });
+      }
+
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+      const { ObjectId } = await import('mongodb');
+
+      // 1. Remove sourceFolder
+      // 2. Add targetFolder
+      const filter = {
+        _id: { $in: ids.map(id => new ObjectId(id)) },
+        userId: req.user._id
+      };
+
+      const result = await historyCollection.updateMany(filter, {
+        $pull: { folderId: sourceFolder },
+      });
+
+      await historyCollection.updateMany(filter, {
+        $addToSet: { folderId: targetFolder }
+      });
+
+      res.json({
+        success: true,
+        message: `Moved entries from ${sourceFolder} to ${targetFolder}`,
+        modifiedCount: result.modifiedCount
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
 // Mount payment routes
 router.use('/api/payment', paymentRouter);
 
