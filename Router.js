@@ -851,6 +851,75 @@ router.post('/move-history',
   }
 );
 
+// Delete account (Clear tokens but keep email and credits)
+router.post('/delete-account',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
+
+      // Find the user and update to remove all OAuth related fields
+      // We keep: email, credits, isPremium (since credits/premium are tied to email/payment)
+      // We remove: googleId, msId, zoomId, all tokens and scopes
+      const updateResult = await usersCollection.updateOne(
+        { _id: req.user._id },
+        {
+          $set: {
+            googleId: null,
+            accessToken: null,
+            refreshToken: null,
+            googleGrantedScopes: [],
+            gmailAccessToken: null,
+            gmailRefreshToken: null,
+            gmailGrantedScopes: [],
+            msId: null,
+            msEmail: null,
+            msAccessToken: null,
+            msRefreshToken: null,
+            msIdToken: null,
+            msGrantedScopes: [],
+            zoomId: null,
+            zoomEmail: null,
+            zoomAccessToken: null,
+            zoomRefreshToken: null,
+            zoomGrantedScopes: [],
+            slackId: null,
+            slackEmail: null,
+            slackAccessToken: null,
+            slackTeamId: null,
+            slackTeamName: null,
+            slackGrantedScopes: [],
+            instagramId: null,
+            instagramUsername: null,
+            instagramAccessToken: null,
+            instagramGrantedScopes: [],
+            metaId: null,
+            metaEmail: null,
+            metaAccessToken: null,
+            metaGrantedScopes: [],
+            metaPageTokens: [],
+            passwordHash: null
+          }
+        }
+      );
+
+      if (updateResult.matchedCount === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Account sensitive data removed. Email and credits preserved.'
+      });
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
+    }
+  }
+);
+
 // Mount payment routes
 router.use('/api/payment', paymentRouter);
 
