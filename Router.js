@@ -87,16 +87,18 @@ router.post(
     try {
 
       const pdfCount = req.files.length;
+      const { jd } = req.body;
+      const creditsToDeduct = jd ? pdfCount * 2 : pdfCount;
 
       // Sum valid (non-expired) credits
       const now = new Date();
       const validCredits = (req.user.credits || []).filter(c => new Date(c.expiresAt) > now);
       const totalCredits = validCredits.reduce((sum, c) => sum + c.amount, 0);
 
-      if (totalCredits < pdfCount) {
+      if (totalCredits < creditsToDeduct) {
         return res.status(402).json({
           success: false,
-          message: `Not enough credits. Available: ${totalCredits}, Required: ${pdfCount}`
+          message: `Not enough credits. Available: ${totalCredits}, Required: ${creditsToDeduct}`
         });
       }
 
@@ -106,7 +108,7 @@ router.post(
 
       // Sort by expiry date ascending
       let credits = [...(req.user.credits || [])].sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
-      let remainingToDeduct = pdfCount;
+      let remainingToDeduct = creditsToDeduct;
 
       for (let i = 0; i < credits.length && remainingToDeduct > 0; i++) {
         if (new Date(credits[i].expiresAt) <= now) continue; // Skip expired
@@ -141,7 +143,7 @@ router.post(
 
       const limit = pLimit(3); // only 3 parallel resumes
 
-      const prompt = `
+      let prompt = `
 Extract the following details from this resume PDF into a JSON object:
 
 - name
@@ -166,6 +168,22 @@ STRICT RULES:
 
 Return ONLY valid JSON.
 `;
+
+      if (jd) {
+        prompt += `
+ADDITIONAL TASK:
+Commonly referred to as a "Fit Analysis" against the provided Job Description (JD) below.
+
+Job Description:
+"""
+${jd}
+"""
+
+Include these two extra fields in the JSON object:
+1. summary: A concise 2-sentence summary of why the candidate is or isn't a good fit.
+2. fitStatus: One of these values: "Highly Recommended", "Good Fit", "Average", "Not a Match".
+`;
+      }
 
       const tasks = req.files.map(file =>
         limit(async () => {
@@ -208,8 +226,8 @@ Return ONLY valid JSON.
       let { folderId = 'pdf-to-text' } = req.body;
       const folderIdArray = Array.isArray(folderId) ? folderId : [folderId];
 
-      // 🔥 Save history for each processed document if user is premium
-      if (req.user.isPremium) {
+      // 🔥 Save history for each processed document if user is premium or JD provided
+      if (req.user.isPremium || jd) {
         const historyCollection = db.collection('history');
         const historyEntries = results.map(result => ({
           userId: req.user._id,
@@ -220,11 +238,13 @@ Return ONLY valid JSON.
           parsedData: result.parsedData || null,
           error: result.error || null,
           status: result.error ? 'failed' : 'success',
-          creditsUsed: 1,
+          creditsUsed: jd ? 2 : 1,
           timestamp: new Date(),
           metadata: {
             totalFiles: pdfCount,
-            remainingCredits: currentTotalCredits
+            remainingCredits: currentTotalCredits,
+            jdProvided: !!jd,
+            jdText: jd ? (jd.length > 500 ? jd.substring(0, 500) + '...' : jd) : null
           }
         }));
 
@@ -234,7 +254,12 @@ Return ONLY valid JSON.
         }
       }
 
-      res.json({ success: true, results });
+      res.json({
+        success: true,
+        results,
+        creditsUsed: creditsToDeduct,
+        remainingCredits: currentTotalCredits
+      });
 
     } catch (err) {
       res.status(500).json({ error: err.message });
