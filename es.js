@@ -221,18 +221,14 @@ router.post('/process-resumes', authMiddleware.verifyToken, processResumes);
    EMAIL OTP VERIFICATION
 ================================ */
 
-// Configure nodemailer for Gmail
+// Configure nodemailer for Namecheap Private Email
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
+  host: 'mail.privateemail.com',
   port: 465,
-  pool: true,
-  maxConnections: 1,
-  maxMessages: 200,
   secure: true,
-  service: 'gmail',
   auth: {
-    user: process.env.GMAIL_EMAIL,
-    pass: process.env.GMAIL_APP_PASSWORD
+    user: "support@neukaps.com",
+    pass: "MueG_Tx-2g3aqSA"
   }
 });
 
@@ -290,7 +286,7 @@ router.post('/send-otp', async (req, res) => {
 
     // Send email
     const mailOptions = {
-      from: process.env.GMAIL_EMAIL,
+      from: '"Neukaps Support" <support@neukaps.com>',
       to: email,
       subject: 'Your OTP Verification Code',
       html: `
@@ -489,7 +485,7 @@ router.post('/resend-otp', async (req, res) => {
 
     // Send email
     const mailOptions = {
-      from: process.env.GMAIL_EMAIL,
+      from: process.env.EMAIL_USER,
       to: email,
       subject: 'Your New OTP Verification Code',
       html: `
