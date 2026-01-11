@@ -79,10 +79,11 @@ const processResumes = async (req, res) => {
             });
         }
 
-        const { emails, provider: initialProvider = 'google' } = req.body;
+        const { emails, provider: initialProvider = 'google', jd } = req.body;
 
         console.log(`[Processor] Initial request provider: ${initialProvider}`);
         console.log(`[Processor] Number of emails to process: ${emails?.length || 0}`);
+        console.log(`[Processor] JD provided: ${!!jd}`);
 
         if (!emails || !Array.isArray(emails) || emails.length === 0) {
             return res.status(400).json({
@@ -151,22 +152,26 @@ const processResumes = async (req, res) => {
 
         console.log(`📊 Total PDFs to process: ${totalPDFCount}`);
 
+        // 2x Credits logic for JD
+        const creditsToDeduct = jd ? totalPDFCount * 2 : totalPDFCount;
+        console.log(`💳 Credits calculation: ${totalPDFCount} PDFs * ${jd ? 2 : 1} (JD) = ${creditsToDeduct} total`);
+
         // Check and deduct credits
         const now = new Date();
         const validCredits = (user.credits || []).filter(c => new Date(c.expiresAt) > now);
         const totalCredits = validCredits.reduce((sum, c) => sum + c.amount, 0);
 
-        if (totalCredits < totalPDFCount) {
+        if (totalCredits < creditsToDeduct) {
             return res.status(402).json({
                 success: false,
                 error: 'INSUFFICIENT_CREDITS',
-                message: `Not enough credits. Available: ${totalCredits}, Required: ${totalPDFCount}`
+                message: `Not enough credits. Available: ${totalCredits}, Required: ${creditsToDeduct}`
             });
         }
 
         // Deduct credits sequentially starting from blocks expiring soonest
         let credits = [...(user.credits || [])].sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
-        let remainingToDeduct = totalPDFCount;
+        let remainingToDeduct = creditsToDeduct;
 
         for (let i = 0; i < credits.length && remainingToDeduct > 0; i++) {
             if (new Date(credits[i].expiresAt) <= now) continue; // Skip expired
@@ -192,7 +197,7 @@ const processResumes = async (req, res) => {
         user.credits = updatedCredits;
         const currentTotalCredits = updatedCredits.reduce((sum, c) => sum + (c.amount || 0), 0);
 
-        console.log(`💳 Credits deducted: ${totalPDFCount}, Remaining: ${currentTotalCredits}`);
+        console.log(`💳 Credits deducted: ${creditsToDeduct}, Remaining: ${currentTotalCredits}`);
 
         const results = [];
 
@@ -290,7 +295,7 @@ const processResumes = async (req, res) => {
                                 }
                             });
 
-                            const prompt = `
+                            let prompt = `
 Extract the following details from this resume PDF into a JSON object:
 
 - name
@@ -315,6 +320,22 @@ STRICT RULES:
 
 Return ONLY valid JSON.
 `;
+
+                            if (jd) {
+                                prompt += `
+ADDITIONAL TASK:
+Commonly referred to as a "Fit Analysis" against the provided Job Description (JD) below.
+
+Job Description:
+"""
+${jd}
+"""
+
+Include these two extra fields in the JSON object:
+1. summary: A concise 2-sentence summary of why the candidate is or isn't a good fit.
+2. fitStatus: One of these values: "Highly Recommended", "Good Fit", "Average", "Not a Match".
+`;
+                            }
 
                             const result = await model.generateContent([
                                 { text: prompt },
@@ -360,26 +381,28 @@ Return ONLY valid JSON.
             }
         }
 
-        // Save to history if premium
-        if (user.isPremium) {
+        // Save to history if premium or if JD matching was used
+        if (user.isPremium || jd) {
             const historyCollection = db.collection('history');
             const historyEntries = results.map(result => ({
                 userId: user._id,
                 userEmail: user.email,
                 userName: user.name || null,
-                folderId: 'default',
+                folderId: ['default'],
                 filename: result.filename || 'N/A',
                 parsedData: result.parsedData || null,
                 error: result.error || null,
                 status: result.status,
                 emailId: result.emailId,
                 emailSubject: result.emailSubject,
-                creditsUsed: 1, // 1 credit per PDF processed
+                creditsUsed: jd ? 2 : 1, // 2 credits per PDF if JD provided
                 timestamp: new Date(),
                 metadata: {
                     source: initialProvider,
                     totalProcessed: results.length,
-                    remainingCredits: currentTotalCredits
+                    remainingCredits: currentTotalCredits,
+                    jdProvided: !!jd,
+                    jdText: jd ? (jd.length > 500 ? jd.substring(0, 500) + '...' : jd) : null
                 }
             }));
 
@@ -392,7 +415,7 @@ Return ONLY valid JSON.
             success: true,
             message: `Processed ${results.length} resumes`,
             results,
-            creditsUsed: totalPDFCount,
+            creditsUsed: creditsToDeduct,
             remainingCredits: currentTotalCredits
         });
 

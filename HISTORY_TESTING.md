@@ -186,7 +186,7 @@ async function getSingleHistory(historyId) {
       "userId": "67638a1b2c3d4e5f6a7b8c9e",
       "userEmail": "user@example.com",
       "userName": "John Doe",
-      "folderId": "pdf-to-text",
+      "folderId": ["pdf-to-text"],
       "filename": "resume.pdf",
       "parsedData": {
         "name": "Jane Smith",

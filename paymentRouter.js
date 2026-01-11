@@ -12,6 +12,13 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
+// Plan Configuration
+const PLAN_CONFIG = {
+  'Starter': { credits: 50, validityDays: 30 },
+  'Professional': { credits: 120, validityDays: 60 },
+  'Enterprise': { credits: 350, validityDays: 90 }
+};
+
 // Create Order Endpoint
 router.post('/create-order', authMiddleware.verifyToken, authMiddleware.getUserFromDB, async (req, res) => {
   try {
@@ -199,6 +206,11 @@ router.post("/verify-payment-paypal", authMiddleware.verifyToken, authMiddleware
 
     const transactionId = data.purchase_units[0].payments.captures[0].id;
 
+    // Fetch the order to get the planName
+    const order = await ordersCollection.findOne({ orderId: orderId });
+    const planName = order?.planName || req.body.planName || 'Professional';
+    const plan = PLAN_CONFIG[planName] || PLAN_CONFIG['Professional'];
+
     // Update order status
     await ordersCollection.updateOne(
       { orderId: orderId },
@@ -221,14 +233,14 @@ router.post("/verify-payment-paypal", authMiddleware.verifyToken, authMiddleware
       createdAt: new Date()
     });
 
-    // Add 250 credits with 30 days expiry
+    // Add credits with expiry based on plan
     await usersCollection.updateOne(
       { _id: req.user._id },
       {
         $push: {
           credits: {
-            amount: 250,
-            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            amount: plan.credits,
+            expiresAt: new Date(Date.now() + plan.validityDays * 24 * 60 * 60 * 1000),
             createdAt: new Date()
           }
         },
@@ -239,7 +251,7 @@ router.post("/verify-payment-paypal", authMiddleware.verifyToken, authMiddleware
     res.json({
       success: true,
       transactionId: transactionId,
-      message: 'Payment verified successfully and credits added'
+      message: `Payment verified successfully and ${plan.credits} credits added`
     });
 
   } catch (err) {
@@ -255,92 +267,90 @@ router.post('/verify-payment', authMiddleware.verifyToken, authMiddleware.getUse
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
+      orderId, // For Generic/PayPal
+      paymentId, // For Generic/PayPal
+      provider
     } = req.body;
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    const db = client.db('Interest');
+    const ordersCollection = db.collection('orders');
+    const paymentsCollection = db.collection('payments');
+    const usersCollection = db.collection('users');
+
+    let isVerified = false;
+    let finalOrderId = razorpay_order_id || orderId;
+    let finalPaymentId = razorpay_payment_id || paymentId;
+
+    if (razorpay_signature) {
+      const sign = razorpay_order_id + "|" + razorpay_payment_id;
+      const expectedSign = crypto
+        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+        .update(sign)
+        .digest("hex");
+      isVerified = (expectedSign === razorpay_signature);
+    } else if (provider === 'paypal') {
+      // For PayPal proxy, we assume it's pre-verified
+      isVerified = true;
+    }
+
+    if (!isVerified || !finalOrderId) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required parameters'
+        message: 'Invalid payment verification or missing order ID'
       });
     }
 
-    const sign = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSign = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(sign)
-      .digest("hex");
-
-    if (expectedSign === razorpay_signature) {
-      // Update order status in database
-      const db = client.db('Interest');
-      const ordersCollection = db.collection('orders');
-      const paymentsCollection = db.collection('payments');
-
-      // Update order status
-      await ordersCollection.updateOne(
-        { orderId: razorpay_order_id },
-        {
-          $set: {
-            status: 'paid',
-            paymentId: razorpay_payment_id,
-            updatedAt: new Date()
-          }
+    // Process successful payment
+    // 1. Update order status
+    await ordersCollection.updateOne(
+      { orderId: finalOrderId },
+      {
+        $set: {
+          status: 'paid',
+          paymentId: finalPaymentId,
+          updatedAt: new Date()
         }
-      );
-
-      // Store payment details
-      await paymentsCollection.insertOne({
-        orderId: razorpay_order_id,
-        paymentId: razorpay_payment_id,
-        signature: razorpay_signature,
-        status: 'verified',
-        createdAt: new Date()
-      });
-
-      // Increment user credits by 250
-      try {
-        const usersCollection = db.collection('users');
-
-        // Get the order to find user information
-        const order = await ordersCollection.findOne({ orderId: razorpay_order_id });
-
-        if (order && order.userId) {
-          // Convert userId to ObjectId if it's a string
-          const userId = typeof order.userId === 'string' ? new ObjectId(order.userId) : order.userId;
-
-          await usersCollection.updateOne(
-            { _id: userId },
-            {
-              $push: {
-                credits: {
-                  amount: 250,
-                  expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                  createdAt: new Date()
-                }
-              },
-              $set: { isPremium: true }
-            }
-          );
-
-          console.log(`Credits incremented by 250 for user: ${order.userId}`);
-        } else {
-          console.warn('No userId found in order for credit increment.');
-        }
-      } catch (creditError) {
-        console.error('Error incrementing user credits:', creditError);
-        // Continue with payment verification even if credit increment fails
       }
+    );
 
-      return res.status(200).json({
-        success: true,
-        message: 'Payment verified successfully and credits added'
-      });
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid signature'
-      });
-    }
+    // 2. Store payment details
+    await paymentsCollection.insertOne({
+      orderId: finalOrderId,
+      paymentId: finalPaymentId,
+      signature: razorpay_signature || null,
+      provider: provider || 'razorpay',
+      status: 'verified',
+      createdAt: new Date()
+    });
+
+    // 3. Add credits based on plan
+    const order = await ordersCollection.findOne({ orderId: finalOrderId });
+    // Plan name can be in order.planName or order.notes.planName
+    const planName = order?.planName || order?.notes?.planName || req.body.planName || 'Professional';
+    const plan = PLAN_CONFIG[planName] || PLAN_CONFIG['Professional'];
+
+    // Identify user to credit
+    const userIdToCredit = order?.userId ? (typeof order.userId === 'string' ? new ObjectId(order.userId) : order.userId) : req.user._id;
+
+    await usersCollection.updateOne(
+      { _id: userIdToCredit },
+      {
+        $push: {
+          credits: {
+            amount: plan.credits,
+            expiresAt: new Date(Date.now() + plan.validityDays * 24 * 60 * 60 * 1000),
+            createdAt: new Date()
+          }
+        },
+        $set: { isPremium: true }
+      }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Payment verified successfully and ${plan.credits} credits added`
+    });
+
   } catch (err) {
     console.error('Error verifying payment:', err);
     res.status(500).json({

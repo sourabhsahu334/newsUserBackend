@@ -87,16 +87,18 @@ router.post(
     try {
 
       const pdfCount = req.files.length;
+      const { jd } = req.body;
+      const creditsToDeduct = jd ? pdfCount * 2 : pdfCount;
 
       // Sum valid (non-expired) credits
       const now = new Date();
       const validCredits = (req.user.credits || []).filter(c => new Date(c.expiresAt) > now);
       const totalCredits = validCredits.reduce((sum, c) => sum + c.amount, 0);
 
-      if (totalCredits < pdfCount) {
+      if (totalCredits < creditsToDeduct) {
         return res.status(402).json({
           success: false,
-          message: `Not enough credits. Available: ${totalCredits}, Required: ${pdfCount}`
+          message: `Not enough credits. Available: ${totalCredits}, Required: ${creditsToDeduct}`
         });
       }
 
@@ -106,7 +108,7 @@ router.post(
 
       // Sort by expiry date ascending
       let credits = [...(req.user.credits || [])].sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt));
-      let remainingToDeduct = pdfCount;
+      let remainingToDeduct = creditsToDeduct;
 
       for (let i = 0; i < credits.length && remainingToDeduct > 0; i++) {
         if (new Date(credits[i].expiresAt) <= now) continue; // Skip expired
@@ -141,7 +143,7 @@ router.post(
 
       const limit = pLimit(3); // only 3 parallel resumes
 
-      const prompt = `
+      let prompt = `
 Extract the following details from this resume PDF into a JSON object:
 
 - name
@@ -166,6 +168,22 @@ STRICT RULES:
 
 Return ONLY valid JSON.
 `;
+
+      if (jd) {
+        prompt += `
+ADDITIONAL TASK:
+Commonly referred to as a "Fit Analysis" against the provided Job Description (JD) below.
+
+Job Description:
+"""
+${jd}
+"""
+
+Include these two extra fields in the JSON object:
+1. summary: A concise 2-sentence summary of why the candidate is or isn't a good fit.
+2. fitStatus: One of these values: "Highly Recommended", "Good Fit", "Average", "Not a Match".
+`;
+      }
 
       const tasks = req.files.map(file =>
         limit(async () => {
@@ -205,25 +223,28 @@ Return ONLY valid JSON.
 
       const results = await Promise.all(tasks);
 
-      const { folderId = 'pdf-to-text' } = req.body;
+      let { folderId = 'pdf-to-text' } = req.body;
+      const folderIdArray = Array.isArray(folderId) ? folderId : [folderId];
 
-      // 🔥 Save history for each processed document if user is premium
-      if (req.user.isPremium) {
+      // 🔥 Save history for each processed document if user is premium or JD provided
+      if (req.user.isPremium || jd) {
         const historyCollection = db.collection('history');
         const historyEntries = results.map(result => ({
           userId: req.user._id,
           userEmail: req.user.email,
           userName: req.user.name || null,
-          folderId: folderId,
+          folderId: folderIdArray,
           filename: result.filename,
           parsedData: result.parsedData || null,
           error: result.error || null,
           status: result.error ? 'failed' : 'success',
-          creditsUsed: 1,
+          creditsUsed: jd ? 2 : 1,
           timestamp: new Date(),
           metadata: {
             totalFiles: pdfCount,
-            remainingCredits: currentTotalCredits
+            remainingCredits: currentTotalCredits,
+            jdProvided: !!jd,
+            jdText: jd ? (jd.length > 500 ? jd.substring(0, 500) + '...' : jd) : null
           }
         }));
 
@@ -233,7 +254,12 @@ Return ONLY valid JSON.
         }
       }
 
-      res.json({ success: true, results });
+      res.json({
+        success: true,
+        results,
+        creditsUsed: creditsToDeduct,
+        remainingCredits: currentTotalCredits
+      });
 
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -343,7 +369,7 @@ router.get('/history',
 
       // Build query filter
       const filter = { userId: req.user._id };
-      if (folderId) filter.folderId = folderId;
+      if (folderId) filter.folderId = Array.isArray(folderId) ? { $in: folderId } : folderId;
       if (status) filter.status = status;
 
       console.log('Filter being used:', filter);
@@ -392,7 +418,7 @@ router.get('/history/:folderId',
       const history = await historyCollection
         .find({
           userId: req.user._id,
-          folderId: folderId
+          folderId: Array.isArray(folderId) ? { $in: folderId } : folderId
         })
         .sort({ timestamp: -1 })
         .skip(skip)
@@ -482,7 +508,7 @@ router.post('/search-history',
 
       // Add folderId filter if provided
       if (folderId) {
-        baseFilter.folderId = folderId;
+        baseFilter.folderId = Array.isArray(folderId) ? { $in: folderId } : folderId;
       }
 
       // Build search filter with $or for multiple fields
@@ -706,12 +732,20 @@ router.delete('/history/:id',
       const historyCollection = db.collection('history');
       const { ObjectId } = await import('mongodb');
 
-      const result = await historyCollection.deleteOne({
-        _id: new ObjectId(req.params.id),
-        userId: req.user._id
-      });
+      const { folderId } = req.body;
+      if (!folderId) {
+        return res.status(400).json({ success: false, message: 'folderId is required' });
+      }
 
-      if (result.deletedCount === 0) {
+      const result = await historyCollection.updateOne(
+        {
+          _id: new ObjectId(req.params.id),
+          userId: req.user._id
+        },
+        { $pull: { folderId: folderId } }
+      );
+
+      if (result.matchedCount === 0) {
         return res.status(404).json({
           success: false,
           message: 'History entry not found or unauthorized'
@@ -720,7 +754,7 @@ router.delete('/history/:id',
 
       res.json({
         success: true,
-        message: 'History entry deleted successfully'
+        message: `History entry removed from ${folderId}`
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -737,13 +771,13 @@ router.delete('/history',
       const db = client.db('Interest');
       const historyCollection = db.collection('history');
 
-      const { ids } = req.body;
+      const { ids, folderId } = req.body;
       const { ObjectId } = await import('mongodb');
 
-      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      if (!ids || !Array.isArray(ids) || ids.length === 0 || !folderId) {
         return res.status(400).json({
           success: false,
-          message: 'An array of IDs is required for bulk deletion'
+          message: 'An array of IDs and folderId are required'
         });
       }
 
@@ -752,15 +786,161 @@ router.delete('/history',
         _id: { $in: ids.map(id => new ObjectId(id)) }
       };
 
-      const result = await historyCollection.deleteMany(filter);
+      const result = await historyCollection.updateMany(filter, {
+        $pull: { folderId: folderId }
+      });
 
       res.json({
         success: true,
-        message: `Deleted ${result.deletedCount} history entries`,
-        deletedCount: result.deletedCount
+        message: `Removed ${result.modifiedCount} history entries from ${folderId}`,
+        modifiedCount: result.modifiedCount
       });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Copy history entries to another folder
+router.post('/copy-history',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const { ids, targetFolder } = req.body;
+      if (!ids || !Array.isArray(ids) || !targetFolder) {
+        return res.status(400).json({ success: false, message: 'IDs and targetFolder are required' });
+      }
+
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+      const { ObjectId } = await import('mongodb');
+
+      const result = await historyCollection.updateMany(
+        {
+          _id: { $in: ids.map(id => new ObjectId(id)) },
+          userId: req.user._id
+        },
+        { $addToSet: { folderId: targetFolder } }
+      );
+
+      res.json({
+        success: true,
+        message: `Copied ${result.modifiedCount} entries to ${targetFolder}`,
+        modifiedCount: result.modifiedCount
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Move history entries from one folder to another
+router.post('/move-history',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const { ids, sourceFolder, targetFolder } = req.body;
+      if (!ids || !Array.isArray(ids) || !sourceFolder || !targetFolder) {
+        return res.status(400).json({ success: false, message: 'IDs, sourceFolder, and targetFolder are required' });
+      }
+
+      const db = client.db('Interest');
+      const historyCollection = db.collection('history');
+      const { ObjectId } = await import('mongodb');
+
+      // 1. Remove sourceFolder
+      // 2. Add targetFolder
+      const filter = {
+        _id: { $in: ids.map(id => new ObjectId(id)) },
+        userId: req.user._id
+      };
+
+      const result = await historyCollection.updateMany(filter, {
+        $pull: { folderId: sourceFolder },
+      });
+
+      await historyCollection.updateMany(filter, {
+        $addToSet: { folderId: targetFolder }
+      });
+
+      res.json({
+        success: true,
+        message: `Moved entries from ${sourceFolder} to ${targetFolder}`,
+        modifiedCount: result.modifiedCount
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// Delete account (Clear tokens but keep email and credits)
+router.post('/delete-account',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
+
+      // Find the user and update to remove all OAuth related fields
+      // We keep: email, credits, isPremium (since credits/premium are tied to email/payment)
+      // We remove: googleId, msId, zoomId, all tokens and scopes
+      const updateResult = await usersCollection.updateOne(
+        { _id: req.user._id },
+        {
+          $set: {
+            googleId: null,
+            accessToken: null,
+            refreshToken: null,
+            googleGrantedScopes: [],
+            gmailAccessToken: null,
+            gmailRefreshToken: null,
+            gmailGrantedScopes: [],
+            msId: null,
+            msEmail: null,
+            msAccessToken: null,
+            msRefreshToken: null,
+            msIdToken: null,
+            msGrantedScopes: [],
+            zoomId: null,
+            zoomEmail: null,
+            zoomAccessToken: null,
+            zoomRefreshToken: null,
+            zoomGrantedScopes: [],
+            slackId: null,
+            slackEmail: null,
+            slackAccessToken: null,
+            slackTeamId: null,
+            slackTeamName: null,
+            slackGrantedScopes: [],
+            instagramId: null,
+            instagramUsername: null,
+            instagramAccessToken: null,
+            instagramGrantedScopes: [],
+            metaId: null,
+            metaEmail: null,
+            metaAccessToken: null,
+            metaGrantedScopes: [],
+            metaPageTokens: [],
+            passwordHash: null
+          }
+        }
+      );
+
+      if (updateResult.matchedCount === 0) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Account sensitive data removed. Email and credits preserved.'
+      });
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      res.status(500).json({ success: false, message: 'Internal server error', error: err.message });
     }
   }
 );

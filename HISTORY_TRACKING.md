@@ -17,7 +17,7 @@ Each history entry contains the following fields:
   "userId": "ObjectId - Reference to user's _id",
   "userEmail": "string - User's email address",
   "userName": "string - User's name (nullable)",
-  "folderId": "string - Type of process (e.g., 'pdf-to-text')",
+  "folderId": "array of strings - List of folders/categories (e.g., ['pdf-to-text'])",
   "filename": "string - Name of the processed file",
   "parsedData": "object - Extracted data from the document (nullable)",
   "error": "string - Error message if processing failed (nullable)",
@@ -60,7 +60,7 @@ Authorization: Bearer <your-jwt-token>
       "userId": "507f191e810c19729de860ea",
       "userEmail": "user@example.com",
       "userName": "John Doe",
-      "folderId": "pdf-to-text",
+      "folderId": ["pdf-to-text"],
       "filename": "resume.pdf",
       "parsedData": {
         "name": "Jane Smith",
@@ -127,7 +127,7 @@ Authorization: Bearer <your-jwt-token>
     "userId": "507f191e810c19729de860ea",
     "userEmail": "user@example.com",
     "userName": "John Doe",
-    "folderId": "pdf-to-text",
+    "folderId": ["pdf-to-text"],
     "filename": "resume.pdf",
     "parsedData": {
       "name": "Jane Smith",
