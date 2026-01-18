@@ -143,44 +143,15 @@ router.post(
 
       const limit = pLimit(3); // only 3 parallel resumes
 
-      // Helper function to extract text from PDF buffer using PdfReader
-      const extractTextFromPdf = (pdfBuffer) => {
-        return new Promise((resolve, reject) => {
-          const textLines = [];
-          new PdfReader().parseBuffer(pdfBuffer, (err, item) => {
-            if (err) {
-              reject(err);
-            } else if (!item) {
-              // End of file - resolve with collected text
-              resolve(textLines.join('\n'));
-            } else if (item.text) {
-              textLines.push(item.text);
-            }
-          });
-        });
-      };
-
       const tasks = req.files.map(file =>
         limit(async () => {
           try {
-            // First extract text from PDF
-            const extractedText = await extractTextFromPdf(file.buffer);
+            // Convert PDF buffer to base64 for Gemini
+            const pdfBase64 = file.buffer.toString('base64');
 
-            if (!extractedText || extractedText.trim().length === 0) {
-              return {
-                filename: file.originalname,
-                error: 'Could not extract text from PDF'
-              };
-            }
-
-            // Build prompt with extracted text
+            // Build prompt for resume extraction
             let prompt = `
-Extract the following details from this resume text into a JSON object:
-
-RESUME TEXT:
-"""
-${extractedText}
-"""
+Extract the following details from this resume PDF into a JSON object:
 
 Extract these fields:
 - name
@@ -223,6 +194,12 @@ Include these two extra fields in the JSON object:
             }
 
             const result = await model.generateContent([
+              {
+                inlineData: {
+                  mimeType: 'application/pdf',
+                  data: pdfBase64
+                }
+              },
               { text: prompt }
             ]);
 
