@@ -135,7 +135,7 @@ router.post(
       const currentTotalCredits = updatedCredits.reduce((sum, c) => sum + (c.amount || 0), 0);
 
       const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash",
+        model: "gemini-2.5-flash",
         generationConfig: {
           responseMimeType: "application/json"
         }
@@ -143,9 +143,46 @@ router.post(
 
       const limit = pLimit(3); // only 3 parallel resumes
 
-      let prompt = `
-Extract the following details from this resume PDF into a JSON object:
+      // Helper function to extract text from PDF buffer using PdfReader
+      const extractTextFromPdf = (pdfBuffer) => {
+        return new Promise((resolve, reject) => {
+          const textLines = [];
+          new PdfReader().parseBuffer(pdfBuffer, (err, item) => {
+            if (err) {
+              reject(err);
+            } else if (!item) {
+              // End of file - resolve with collected text
+              resolve(textLines.join('\n'));
+            } else if (item.text) {
+              textLines.push(item.text);
+            }
+          });
+        });
+      };
 
+      const tasks = req.files.map(file =>
+        limit(async () => {
+          try {
+            // First extract text from PDF
+            const extractedText = await extractTextFromPdf(file.buffer);
+
+            if (!extractedText || extractedText.trim().length === 0) {
+              return {
+                filename: file.originalname,
+                error: 'Could not extract text from PDF'
+              };
+            }
+
+            // Build prompt with extracted text
+            let prompt = `
+Extract the following details from this resume text into a JSON object:
+
+RESUME TEXT:
+"""
+${extractedText}
+"""
+
+Extract these fields:
 - name
 - email
 - mobile number
@@ -169,8 +206,8 @@ STRICT RULES:
 Return ONLY valid JSON.
 `;
 
-      if (jd) {
-        prompt += `
+            if (jd) {
+              prompt += `
 ADDITIONAL TASK:
 Commonly referred to as a "Fit Analysis" against the provided Job Description (JD) below.
 
@@ -183,19 +220,10 @@ Include these two extra fields in the JSON object:
 1. summary: A concise 2-sentence summary of why the candidate is or isn't a good fit.
 2. fitStatus: One of these values: "Highly Recommended", "Good Fit", "Average", "Not a Match".
 `;
-      }
+            }
 
-      const tasks = req.files.map(file =>
-        limit(async () => {
-          try {
             const result = await model.generateContent([
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: "application/pdf",
-                  data: file.buffer.toString("base64")
-                }
-              }
+              { text: prompt }
             ]);
 
             const aiText = result.response.text();
