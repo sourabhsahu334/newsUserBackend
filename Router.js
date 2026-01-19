@@ -156,9 +156,9 @@ Extract the following details from this resume PDF into a JSON object:
 Extract these fields:
 - name
 - email
-- mobile number
-- github link
-- linkedin link
+- mobile_number
+- github_link
+- linkedin_link
 - current_company
 - skillsets (array of strings)
 - collegename
