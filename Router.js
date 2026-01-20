@@ -232,7 +232,8 @@ Include these two extra fields in the JSON object:
       const folderIdArray = Array.isArray(folderId) ? folderId : [folderId];
 
       // 🔥 Save history for each processed document if user is premium or JD provided
-      if (req.user.isPremium || jd) {
+      // if (req.user.isPremium || jd) {
+      if (true) {
         const historyCollection = db.collection('history');
         const historyEntries = results.map(result => ({
           userId: req.user._id,
