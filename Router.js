@@ -235,7 +235,9 @@ Include these two extra fields in the JSON object:
       // if (req.user.isPremium || jd) {
       if (true) {
         const historyCollection = db.collection('history');
-        const historyEntries = results.map(result => ({
+        // Filter out results with errors - only save successful entries
+        const successfulResults = results.filter(result => !result.error);
+        const historyEntries = successfulResults.map(result => ({
           userId: req.user._id,
           userEmail: req.user.email,
           userName: req.user.name || null,
