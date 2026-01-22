@@ -87,7 +87,7 @@ router.post(
     try {
 
       const pdfCount = req.files.length;
-      const { jd } = req.body;
+      let { jd } = req.body;
       const creditsToDeduct = jd ? pdfCount * 2 : pdfCount;
 
       // Sum valid (non-expired) credits
