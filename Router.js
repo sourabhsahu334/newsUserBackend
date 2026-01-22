@@ -231,6 +231,21 @@ Include these two extra fields in the JSON object:
       let { folderId = 'pdf-to-text' } = req.body;
       const folderIdArray = Array.isArray(folderId) ? folderId : [folderId];
 
+      // If no JD provided in body, try to find it from the folder settings
+      if (!jd && req.user.folderTypes && folderId !== 'pdf-to-text') {
+        const primaryFolder = folderIdArray[0];
+        // Handle both legacy string array and new object array
+        const folderObj = req.user.folderTypes.find(f =>
+          (typeof f === 'string' && f === primaryFolder) ||
+          (typeof f === 'object' && f.foldername === primaryFolder)
+        );
+
+        if (folderObj && typeof folderObj === 'object' && folderObj.JD) {
+          jd = folderObj.JD;
+          console.log(`Using JD from folder ${primaryFolder}`);
+        }
+      }
+
       // 🔥 Save history for each processed document if user is premium or JD provided
       // if (req.user.isPremium || jd) {
       if (true) {
@@ -574,7 +589,7 @@ router.post('/create-folder',
   authMiddleware.getUserFromDB,
   async (req, res) => {
     try {
-      const { folderName } = req.body;
+      const { folderName, jd } = req.body;
 
       // Validate folderName
       if (!folderName || typeof folderName !== 'string') {
@@ -597,18 +612,28 @@ router.post('/create-folder',
       const usersCollection = db.collection('users');
 
       // Check if folder name already exists
-      if (req.user.folderTypes && req.user.folderTypes.includes(trimmedFolderName)) {
+      const folderExists = req.user.folderTypes && req.user.folderTypes.some(f => {
+        if (typeof f === 'string') return f === trimmedFolderName;
+        return f.foldername === trimmedFolderName;
+      });
+
+      if (folderExists) {
         return res.status(405).json({
           success: false,
           message: 'folder already exist'
         });
       }
 
-      // Add folderName to user's folderTypes array using $addToSet to prevent duplicates
+      const newFolder = {
+        foldername: trimmedFolderName,
+        JD: jd || ""
+      };
+
+      // Add folderName to user's folderTypes array
       const result = await usersCollection.updateOne(
         { _id: req.user._id },
         {
-          $addToSet: { folderTypes: trimmedFolderName }
+          $push: { folderTypes: newFolder }
         }
       );
 
@@ -693,10 +718,18 @@ router.post('/delete-folder',
       const usersCollection = db.collection('users');
 
       // Remove folderName from user's folderTypes array using $pull
-      const result = await usersCollection.updateOne(
+      // Handle both legacy strings and new objects
+      await usersCollection.updateOne(
         { _id: req.user._id },
         {
           $pull: { folderTypes: trimmedFolderName }
+        }
+      );
+
+      const result = await usersCollection.updateOne(
+        { _id: req.user._id },
+        {
+          $pull: { folderTypes: { foldername: trimmedFolderName } }
         }
       );
 

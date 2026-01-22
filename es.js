@@ -68,7 +68,7 @@ passport.use(
                 expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                 createdAt: new Date()
               }],
-              folderTypes: ["default"],
+              folderTypes: [{ foldername: "default", JD: "" }],
               googleGrantedScopes: grantedScopes,
               createdAt: new Date()
             };
