@@ -15,7 +15,7 @@ import authMiddleware from './middleware/authMiddleware.js';
 const router = express.Router();
 import { getInbox, sendEmail } from './controller/emailcontroller.js';
 import { processResumes } from './controller/resumeProcessor.js';
-import { microsoftAuth, microsoftCallback, getOutlookInbox } from './controller/microsoftController.js';
+import { microsoftAuth, microsoftCallback, getOutlookInbox, sendOutlookMail } from './controller/microsoftController.js';
 
 
 
@@ -215,6 +215,7 @@ router.get('/isPremiumUser', authMiddleware.verifyToken, authMiddleware.getUserF
 router.get('/gmail/inbox', authMiddleware.verifyToken, getInbox);
 router.post('/gmail/send', authMiddleware.verifyToken, sendEmail);
 router.get('/microsoft/inbox', authMiddleware.verifyToken, getOutlookInbox);
+router.post('/microsoft/send', authMiddleware.verifyToken, sendOutlookMail);
 router.post('/process-resumes', authMiddleware.verifyToken, processResumes);
 
 /* ==============================

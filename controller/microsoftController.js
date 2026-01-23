@@ -134,3 +134,58 @@ export const getOutlookInbox = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch Outlook inbox', details: err.message });
     }
 };
+
+export const sendOutlookMail = async (req, res) => {
+    try {
+        const db = client.db('Interest');
+        const usersCollection = db.collection('users');
+        let user = await usersCollection.findOne({ _id: new ObjectId(req.user.id) });
+
+        if (!user || !user.msAccessToken) {
+            return res.status(400).json({ error: 'No Microsoft token found. Please sign in with Microsoft.' });
+        }
+
+        // Check scopes (optional but recommended)
+        // Note: callGraphApiWithRefresh handles 401, but explicit scope check is good UI feedback
+        // if (!user.msGrantedScopes || !user.msGrantedScopes.includes('Mail.Send')) ...
+
+        const { to, subject, body } = req.body;
+
+        if (!to || !subject || !body) {
+            return res.status(400).json({ error: 'To, Subject, and Body are required.' });
+        }
+
+        const mail = {
+            message: {
+                subject: subject,
+                body: {
+                    contentType: 'HTML', // Using HTML to support rich text/templates
+                    content: body
+                },
+                toRecipients: [
+                    {
+                        emailAddress: {
+                            address: to
+                        }
+                    }
+                ]
+            },
+            saveToSentItems: 'true'
+        };
+
+        await callGraphApiWithRefresh(
+            user._id,
+            user.msAccessToken,
+            user.msRefreshToken,
+            '/me/sendMail',
+            'POST',
+            mail
+        );
+
+        res.json({ success: true, message: 'Email sent successfully via Outlook' });
+
+    } catch (err) {
+        console.error('Send Outlook mail error:', err);
+        res.status(500).json({ error: 'Failed to send Outlook mail', details: err.message });
+    }
+};
