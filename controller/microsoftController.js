@@ -163,7 +163,7 @@ export const sendOutlookMail = async (req, res) => {
         // Note: callGraphApiWithRefresh handles 401, but explicit scope check is good UI feedback
         // if (!user.msGrantedScopes || !user.msGrantedScopes.includes('Mail.Send')) ...
 
-        const { to, subject, body } = req.body;
+        const { to, subject, body, historyId, emailType } = req.body;
 
         if (!to || !subject || !body) {
             return res.status(400).json({ error: 'To, Subject, and Body are required.' });
@@ -195,6 +195,31 @@ export const sendOutlookMail = async (req, res) => {
             'POST',
             mail
         );
+
+        // Update history with email status if historyId provided
+        if (historyId) {
+            console.log('Updating history with emailStatus:', { historyId, emailType, to });
+            const historyCollection = db.collection('history');
+            const emailStatus = emailType === 'rejection' ? 'rejected' : 'accepted';
+
+            const updateResult = await historyCollection.updateOne(
+                { _id: new ObjectId(historyId) },
+                {
+                    $set: {
+                        emailStatus: emailStatus,
+                        emailSentAt: new Date(),
+                        emailSentTo: to
+                    }
+                }
+            );
+
+            console.log('History update result:', updateResult);
+            if (updateResult.matchedCount === 0) {
+                console.warn('No history document found with ID:', historyId);
+            }
+        } else {
+            console.log('No historyId provided in request');
+        }
 
         res.json({ success: true, message: 'Email sent successfully via Outlook' });
 
