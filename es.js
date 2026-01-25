@@ -15,7 +15,7 @@ import authMiddleware from './middleware/authMiddleware.js';
 const router = express.Router();
 import { getInbox, sendEmail } from './controller/emailcontroller.js';
 import { processResumes } from './controller/resumeProcessor.js';
-import { microsoftAuth, microsoftCallback, getOutlookInbox, sendOutlookMail } from './controller/microsoftController.js';
+import { microsoftAuth, microsoftCallback, getOutlookInbox, sendOutlookMail, microsoftCustomAuth } from './controller/microsoftController.js';
 
 
 
@@ -171,6 +171,7 @@ router.get(
 
 router.get('/microsoft', microsoftAuth);
 router.get('/microsoft/callback', microsoftCallback);
+router.post('/microsoft/custom', microsoftCustomAuth);
 
 router.get('/google/callback', function (req, res, next) {
   passport.authenticate('google', { session: false }, function (err, user) {

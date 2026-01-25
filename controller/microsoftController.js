@@ -77,6 +77,20 @@ export const microsoftCallback = async (req, res) => {
     }
 };
 
+export const microsoftCustomAuth = async (req, res) => {
+    const { scopes } = req.body;
+    if (!Array.isArray(scopes) || scopes.length === 0) {
+        return res.status(400).json({ error: 'Scopes array is required.' });
+    }
+    try {
+        const url = await getAuthUrl(scopes);
+        res.json({ redirectUrl: url });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to initiate Microsoft login', details: err.message });
+    }
+};
+
+
 export const getOutlookInbox = async (req, res) => {
     try {
         const db = client.db('Interest');
