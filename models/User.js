@@ -42,6 +42,26 @@ const userSchema = new mongoose.Schema({
     pageName: String,
     accessToken: String
   }],
+  activeColumn: {
+    type: [String],
+    default: [
+      "fit_status",
+      "current_company",
+      "mobile",
+      "summary",
+      "collegename",
+      "skillsets",
+      "total_skills",
+      "total_experience",
+      "total_experience_months",
+      "number_of_companies",
+      "latest_company",
+      "latest_start_date",
+      "latest_end_date",
+      "latest_duration_months",
+      "experience_history"
+    ]
+  },
   passwordHash: String,
 });
 

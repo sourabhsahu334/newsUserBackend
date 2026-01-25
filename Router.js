@@ -583,6 +583,47 @@ router.post('/search-history',
 );
 
 
+
+// Update activeColumn endpoint
+router.post('/update-active-column',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const { activeColumn } = req.body;
+
+      if (!Array.isArray(activeColumn)) {
+        return res.status(400).json({
+          success: false,
+          message: 'activeColumn must be an array'
+        });
+      }
+
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
+
+      await usersCollection.updateOne(
+        { _id: req.user._id },
+        { $set: { activeColumn: activeColumn } }
+      );
+
+      res.json({
+        success: true,
+        message: 'Active column updated successfully',
+        activeColumn
+      });
+
+    } catch (err) {
+      console.error('Error updating active column:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update active column',
+        error: err.message
+      });
+    }
+  }
+);
+
 // Create folder endpoint - adds folder name to user's folderTypes array
 router.post('/create-folder',
   authMiddleware.verifyToken,
