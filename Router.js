@@ -584,13 +584,13 @@ router.post('/search-history',
 
 
 
-// Update activeColumn endpoint
+// Update activeColumn endpoint - stores activeColumn inside specific folder in folderTypes
 router.post('/update-active-column',
   authMiddleware.verifyToken,
   authMiddleware.getUserFromDB,
   async (req, res) => {
     try {
-      const { activeColumn } = req.body;
+      const { activeColumn, folderName } = req.body;
 
       if (!Array.isArray(activeColumn)) {
         return res.status(400).json({
@@ -599,17 +599,53 @@ router.post('/update-active-column',
         });
       }
 
+      if (!folderName) {
+        return res.status(400).json({
+          success: false,
+          message: 'folderName is required'
+        });
+      }
+
       const db = client.db('Interest');
       const usersCollection = db.collection('users');
 
+      // Get user's current folderTypes
+      const user = await usersCollection.findOne({ _id: req.user._id });
+
+      if (!user || !user.folderTypes) {
+        return res.status(404).json({
+          success: false,
+          message: 'User or folderTypes not found'
+        });
+      }
+
+      // Update the specific folder's activeColumn
+      const updatedFolderTypes = user.folderTypes.map(folder => {
+        if (typeof folder === 'object' && folder.foldername === folderName) {
+          return {
+            ...folder,
+            activeColumn: activeColumn
+          };
+        } else if (typeof folder === 'string' && folder === folderName) {
+          // Convert string to object if needed
+          return {
+            foldername: folder,
+            activeColumn: activeColumn
+          };
+        }
+        return folder;
+      });
+
+      // Update the entire folderTypes array
       await usersCollection.updateOne(
         { _id: req.user._id },
-        { $set: { activeColumn: activeColumn } }
+        { $set: { folderTypes: updatedFolderTypes } }
       );
 
       res.json({
         success: true,
-        message: 'Active column updated successfully',
+        message: 'Active column updated successfully for folder',
+        folderName,
         activeColumn
       });
 
@@ -618,6 +654,67 @@ router.post('/update-active-column',
       res.status(500).json({
         success: false,
         message: 'Failed to update active column',
+        error: err.message
+      });
+    }
+  }
+);
+
+// Get activeColumn for a specific folder
+router.get('/get-active-column/:folderName',
+  authMiddleware.verifyToken,
+  authMiddleware.getUserFromDB,
+  async (req, res) => {
+    try {
+      const { folderName } = req.params;
+
+      if (!folderName) {
+        return res.status(400).json({
+          success: false,
+          message: 'folderName is required'
+        });
+      }
+
+      const db = client.db('Interest');
+      const usersCollection = db.collection('users');
+
+      const user = await usersCollection.findOne({ _id: req.user._id });
+
+      if (!user || !user.folderTypes) {
+        return res.status(404).json({
+          success: false,
+          message: 'User or folderTypes not found'
+        });
+      }
+
+      // Find the specific folder and get its activeColumn
+      const folder = user.folderTypes.find(f => {
+        if (typeof f === 'object') {
+          return f.foldername === folderName;
+        }
+        return f === folderName;
+      });
+
+      if (!folder) {
+        return res.status(404).json({
+          success: false,
+          message: 'Folder not found'
+        });
+      }
+
+      const activeColumn = typeof folder === 'object' ? folder.activeColumn : null;
+
+      res.json({
+        success: true,
+        folderName,
+        activeColumn: activeColumn || []
+      });
+
+    } catch (err) {
+      console.error('Error getting active column:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get active column',
         error: err.message
       });
     }
@@ -667,7 +764,24 @@ router.post('/create-folder',
 
       const newFolder = {
         foldername: trimmedFolderName,
-        JD: jd || ""
+        JD: jd || "",
+        activeColumn: [
+          "fit_status",
+          "current_company",
+          "mobile",
+          "summary",
+          "collegename",
+          "skillsets",
+          "total_skills",
+          "total_experience",
+          "total_experience_months",
+          "number_of_companies",
+          "latest_company",
+          "latest_start_date",
+          "latest_end_date",
+          "latest_duration_months",
+          "experience_history"
+        ]
       };
 
       // Add folderName to user's folderTypes array

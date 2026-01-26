@@ -51,7 +51,27 @@ export const microsoftCallback = async (req, res) => {
                     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                     createdAt: new Date()
                 }],
-                folderTypes: ["default"],
+                folderTypes: [{
+                    foldername: "default",
+                    JD: "",
+                    activeColumn: [
+                        "fit_status",
+                        "current_company",
+                        "mobile",
+                        "summary",
+                        "collegename",
+                        "skillsets",
+                        "total_skills",
+                        "total_experience",
+                        "total_experience_months",
+                        "number_of_companies",
+                        "latest_company",
+                        "latest_start_date",
+                        "latest_end_date",
+                        "latest_duration_months",
+                        "experience_history"
+                    ]
+                }],
                 createdAt: new Date()
             };
             const result = await usersCollection.insertOne(newUser);
