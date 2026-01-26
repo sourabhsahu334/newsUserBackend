@@ -214,8 +214,21 @@ router.get('/logout', function (req, res) {
 });
 
 router.get('/me', authMiddleware.verifyToken, authMiddleware.getUserFromDB, function (req, res) {
-  const user = req.user;
+  const user = { ...req.user };
   const totalCredits = (user.credits || []).reduce((sum, c) => sum + (c.amount || 0), 0);
+
+  // Remove sensitive tokens before sending to frontend
+  const sensitiveFields = [
+    'accessToken', 'refreshToken',
+    'msAccessToken', 'msRefreshToken', 'msIdToken',
+    'gmailAccessToken', 'gmailRefreshToken',
+    'zoomAccessToken', 'zoomRefreshToken',
+    'slackAccessToken',
+    'instagramAccessToken',
+    'metaAccessToken', 'metaPageTokens',
+    'passwordHash'
+  ];
+  sensitiveFields.forEach(field => delete user[field]);
 
   res.json({
     ...user,
