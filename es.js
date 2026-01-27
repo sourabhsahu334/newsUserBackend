@@ -246,6 +246,106 @@ router.get('/isPremiumUser', authMiddleware.verifyToken, authMiddleware.getUserF
   });
 });
 
+// Test API to initialize premium user with credits and send congratulatory email
+router.post('/test/init-premium', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+
+    const db = client.db('Interest');
+    const usersCollection = db.collection('users');
+
+    // Default configuration for new/reset users
+    const defaultFolderTypes = [{
+      foldername: "default",
+      JD: "",
+      activeColumn: [
+        "name", "email", "mobile", "fit_status", "current_company",
+        "summary", "collegename", "skillsets", "total_skills",
+        "total_experience", "total_experience_months", "number_of_companies",
+        "latest_company", "latest_start_date", "latest_end_date",
+        "latest_duration_months", "experience_history"
+      ]
+    }];
+
+    // 100 credits valid for 1 year
+    const testCredits = [{
+      amount: 100,
+      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      createdAt: new Date()
+    }];
+
+    // Upsert user
+    const updateResult = await usersCollection.findOneAndUpdate(
+      { email: email },
+      {
+        $set: {
+          email: email,
+          isPremium: true,
+          updatedAt: new Date()
+        },
+        $push: { credits: { $each: testCredits } },
+        $setOnInsert: {
+          folderTypes: defaultFolderTypes,
+          createdAt: new Date()
+        }
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
+
+    const user = updateResult.value || await usersCollection.findOne({ email });
+
+    // Send congratulatory email
+    const mailOptions = {
+      from: '"Neukaps Team" <support@neukaps.com>',
+      to: email,
+      subject: 'Congratulations! Your Neukaps Premium Access is Active',
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+          <h2 style="color: #4F46E5;">Welcome to Neukaps Premium!</h2>
+          <p>Hello,</p>
+          <p>We are excited to inform you that your <strong>Premium Access</strong> and <strong>100 Credits</strong> have been successfully added to your account (<strong>${email}</strong>).</p>
+          <p>With Neukaps Premium, you can now:</p>
+          <ul style="line-height: 1.6;">
+            <li>Access your Gmail/Outlook resume inbox directly.</li>
+            <li>Send professional selection/rejection emails with custom templates.</li>
+            <li>Efficiently process and manage your talent pool.</li>
+          </ul>
+          <p>Go ahead and start exploring the premium features on the platform.</p>
+          <div style="margin-top: 30px; text-align: center;">
+            <a href="${FRONTEND_URL}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Go to Dashboard</a>
+          </div>
+          <p style="margin-top: 30px; color: #666; font-size: 12px;">If you have any questions, feel free to reply to this email.</p>
+          <p style="color: #666; font-size: 12px;">The Neukaps Team</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.json({
+      success: true,
+      message: 'User initialized as premium, credits added, and welcome email sent.',
+      user: {
+        id: user._id,
+        email: user.email,
+        isPremium: user.isPremium,
+        totalCredits: (user.credits || []).reduce((sum, c) => sum + (c.amount || 0), 0)
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in /test/init-premium:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
 router.get('/gmail/inbox', authMiddleware.verifyToken, getInbox);
 router.post('/gmail/send', authMiddleware.verifyToken, sendEmail);
 router.get('/microsoft/inbox', authMiddleware.verifyToken, getOutlookInbox);
