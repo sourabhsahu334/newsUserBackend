@@ -90,7 +90,7 @@ passport.use(
                   "experience_history"
                 ]
               }],
-              googleGrantedScopes: grantedScopes,
+              gmailGrantedScopes: grantedScopes,
               createdAt: new Date()
             };
 
@@ -110,7 +110,7 @@ passport.use(
               googleId: profile.id,
               accessToken: accessToken,
               refreshToken: refreshToken,
-              googleGrantedScopes: grantedScopes,
+              gmailGrantedScopes: grantedScopes,
               updatedAt: new Date()
             };
 

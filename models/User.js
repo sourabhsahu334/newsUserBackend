@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
   msRefreshToken: String,
   msIdToken: String,
   msGrantedScopes: [String],
-  googleGrantedScopes: [String],
+  gmailGrantedScopes: [String],
   gmailAccessToken: String,
   gmailRefreshToken: String,
   gmailGrantedScopes: [String],
