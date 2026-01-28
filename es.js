@@ -16,6 +16,7 @@ const router = express.Router();
 import { getInbox, sendEmail } from './controller/emailcontroller.js';
 import { processResumes } from './controller/resumeProcessor.js';
 import { microsoftAuth, microsoftCallback, getOutlookInbox, sendOutlookMail, microsoftCustomAuth } from './controller/microsoftController.js';
+import { googleCustomAuth } from './controller/googleController.js';
 
 
 
@@ -180,8 +181,8 @@ router.get(
     scope: [
       'profile',
       'email',
-      'https://www.googleapis.com/auth/gmail.readonly',
-      // 'https://www.googleapis.com/auth/gmail.send',
+      // 'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.send',
       // 'https://www.googleapis.com/auth/calendar'
     ],
     accessType: 'offline',
@@ -192,6 +193,7 @@ router.get(
 router.get('/microsoft', microsoftAuth);
 router.get('/microsoft/callback', microsoftCallback);
 router.post('/microsoft/custom', microsoftCustomAuth);
+router.post('/google/custom', googleCustomAuth);
 
 router.get('/google/callback', function (req, res, next) {
   passport.authenticate('google', { session: false }, function (err, user) {

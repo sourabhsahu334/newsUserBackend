@@ -228,7 +228,8 @@ export const sendOutlookMail = async (req, res) => {
                     $set: {
                         emailStatus: emailStatus,
                         emailSentAt: new Date(),
-                        emailSentTo: to
+                        emailSentTo: to,
+                        sentVia: 'outlook'
                     }
                 }
             );

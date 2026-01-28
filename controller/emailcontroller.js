@@ -214,7 +214,7 @@ const sendEmail = async (req, res) => {
         const oAuth2Client = getOAuth2Client(user);
         const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
-        const { to, subject, message } = req.body;
+        const { to, subject, message, historyId, emailType } = req.body;
         const raw = Buffer.from(
             `To: ${to}\r\nSubject: ${subject}\r\n\r\n${message}`
         ).toString('base64');
@@ -224,7 +224,26 @@ const sendEmail = async (req, res) => {
             requestBody: { raw }
         });
 
-        res.json({ status: 'Email sent' });
+        // Update history if historyId is provided
+        if (historyId) {
+            console.log('Updating history with Gmail status:', { historyId, emailType, to });
+            const historyCollection = db.collection('history');
+            const emailStatus = emailType === 'rejection' ? 'rejected' : 'accepted';
+
+            await historyCollection.updateOne(
+                { _id: new ObjectId(historyId) },
+                {
+                    $set: {
+                        emailStatus: emailStatus,
+                        emailSentAt: new Date(),
+                        emailSentTo: to,
+                        sentVia: 'gmail'
+                    }
+                }
+            );
+        }
+
+        res.json({ success: true, message: 'Email sent successfully via Gmail' });
     } catch (err) {
         console.error('Error in sendEmail:', err);
 
