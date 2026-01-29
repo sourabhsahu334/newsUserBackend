@@ -317,6 +317,8 @@ STRICT RULES:
 - If end date is "Present", return "Present" exactly.
 - If a date is missing, use null.
 - Do NOT guess or infer dates.
+- github_link: Extract the full URL. If only a username is found, return "https://github.com/[username]". If only the word "GitHub" or a placeholder is found, return null.
+- linkedin_link: Extract the full URL. If only a name or "LinkedIn" is found, return null.
 
 Return ONLY valid JSON.
 `;
