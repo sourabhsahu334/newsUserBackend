@@ -17,6 +17,7 @@ export const microsoftAuth = async (req, res) => {
 
 export const microsoftCallback = async (req, res) => {
     const code = req.query.code;
+    const state = req.query.state;
     if (!code) return res.status(400).json({ error: 'No code provided' });
 
     try {
@@ -24,9 +25,16 @@ export const microsoftCallback = async (req, res) => {
         const db = client.db('Interest');
         const usersCollection = db.collection('users');
 
-        let user = await usersCollection.findOne({ msId: tokenResponse.account.homeAccountId });
-        if (!user) {
-            user = await usersCollection.findOne({ email: tokenResponse.account.username });
+        var userIdToLink = state && /^[0-9a-fA-F]{24}$/.test(state) ? state : null;
+        let user;
+
+        if (userIdToLink) {
+            user = await usersCollection.findOne({ _id: new ObjectId(userIdToLink) });
+        } else {
+            user = await usersCollection.findOne({ msId: tokenResponse.account.homeAccountId });
+            if (!user) {
+                user = await usersCollection.findOne({ email: tokenResponse.account.username });
+            }
         }
 
         const grantedScopes = tokenResponse.scopes || [];
@@ -41,7 +49,12 @@ export const microsoftCallback = async (req, res) => {
             updatedAt: new Date()
         };
 
-        if (!user) {
+        // If linking or if it's a specific Outlook account connection, store specifically
+        if (userIdToLink || grantedScopes.some(s => s.toLowerCase().includes('mail.'))) {
+            updateData.outlookconnectmail = tokenResponse.account.username;
+        }
+
+        if (!user && !userIdToLink) {
             const newUser = {
                 ...updateData,
                 email: tokenResponse.account.username,
@@ -76,12 +89,14 @@ export const microsoftCallback = async (req, res) => {
             };
             const result = await usersCollection.insertOne(newUser);
             user = { _id: result.insertedId, ...newUser };
-        } else {
+        } else if (user) {
             await usersCollection.updateOne(
                 { _id: user._id },
                 { $set: updateData }
             );
             user = { ...user, ...updateData };
+        } else {
+            throw new Error('User not found to link');
         }
 
         const token = jwt.sign(
@@ -99,11 +114,12 @@ export const microsoftCallback = async (req, res) => {
 
 export const microsoftCustomAuth = async (req, res) => {
     const { scopes } = req.body;
+    const userId = req.user?.id; // From verifyToken middleware
     if (!Array.isArray(scopes) || scopes.length === 0) {
         return res.status(400).json({ error: 'Scopes array is required.' });
     }
     try {
-        const url = await getAuthUrl(scopes);
+        const url = await getAuthUrl(scopes, userId);
         res.json({ redirectUrl: url });
     } catch (err) {
         res.status(500).json({ error: 'Failed to initiate Microsoft login', details: err.message });

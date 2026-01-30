@@ -2,13 +2,15 @@ import { getGoogleAuthUrl } from '../services/googleService.js';
 
 export const googleCustomAuth = async (req, res) => {
     const { scopes } = req.body;
+    const userId = req.user?.id; // From verifyToken middleware
     if (!Array.isArray(scopes) || scopes.length === 0) {
         return res.status(400).json({ error: 'Scopes array is required.' });
     }
     try {
-        const url = await getGoogleAuthUrl(scopes);
+        const url = await getGoogleAuthUrl(scopes, userId);
         res.json({ redirectUrl: url });
     } catch (err) {
         res.status(500).json({ error: 'Failed to initiate Google login', details: err.message });
     }
 };
+
