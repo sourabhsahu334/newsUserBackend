@@ -215,9 +215,23 @@ const sendEmail = async (req, res) => {
         const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
 
         const { to, subject, message, historyId, emailType } = req.body;
-        const raw = Buffer.from(
-            `To: ${to}\r\nSubject: ${subject}\r\n\r\n${message}`
-        ).toString('base64');
+
+        // Construct MIME message for HTML support
+        const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
+        const messageParts = [
+            `To: ${to}`,
+            'Content-Type: text/html; charset=utf-8',
+            'MIME-Version: 1.0',
+            `Subject: ${utf8Subject}`,
+            '',
+            message,
+        ];
+        const email = messageParts.join('\n');
+        const raw = Buffer.from(email)
+            .toString('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
 
         await gmail.users.messages.send({
             userId: 'me',
