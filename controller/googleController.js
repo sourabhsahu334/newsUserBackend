@@ -12,3 +12,4 @@ export const googleCustomAuth = async (req, res) => {
         res.status(500).json({ error: 'Failed to initiate Google login', details: err.message });
     }
 };
+
