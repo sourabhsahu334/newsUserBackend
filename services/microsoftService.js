@@ -14,11 +14,15 @@ const msalConfig = {
 const msalClient = new ConfidentialClientApplication(msalConfig);
 const REDIRECT_URI = process.env.MS_REDIRECT_URI || 'http://localhost:3001/auth/microsoft/callback';
 
-export const getAuthUrl = async (scopes = ['User.Read', 'Mail.Read', 'offline_access']) => {
-    return await msalClient.getAuthCodeUrl({
+export const getAuthUrl = async (scopes = ['User.Read', 'Mail.Read', 'offline_access'], state) => {
+    const authCodeUrlParameters = {
         scopes,
         redirectUri: REDIRECT_URI,
-    });
+    };
+    if (state) {
+        authCodeUrlParameters.state = state;
+    }
+    return await msalClient.getAuthCodeUrl(authCodeUrlParameters);
 };
 
 export const getTokenByCode = async (code, scopes = ['User.Read', 'Mail.Read', 'offline_access']) => {

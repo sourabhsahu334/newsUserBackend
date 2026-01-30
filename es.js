@@ -47,17 +47,26 @@ passport.use(
       var self = this;
       var db = client.db('Interest');
       var usersCollection = db.collection('users');
+      var state = req.query.state;
+      var userIdToLink = state && /^[0-9a-fA-F]{24}$/.test(state) ? state : null;
 
-      usersCollection.findOne({ googleId: profile.id })
-        .then(function (user) {
-          if (user) return user;
-          return usersCollection.findOne({ email: profile.emails[0].value });
-        })
+      var findPromise;
+      if (userIdToLink) {
+        findPromise = usersCollection.findOne({ _id: new ObjectId(userIdToLink) });
+      } else {
+        findPromise = usersCollection.findOne({ googleId: profile.id })
+          .then(function (user) {
+            if (user) return user;
+            return usersCollection.findOne({ email: profile.emails[0].value });
+          });
+      }
+
+      findPromise
         .then(function (user) {
           var grantedScopes = (req && req.query && req.query.scope) ?
             req.query.scope.split(' ') : [];
 
-          if (!user) {
+          if (!user && !userIdToLink) {
             var newUser = {
               googleId: profile.id,
               email: profile.emails[0].value,
@@ -95,30 +104,41 @@ passport.use(
             };
 
             // Check for Gmail specific scope
-            if (grantedScopes.some(s => s.includes('gmail.readonly'))) {
+            if (grantedScopes.some(s => s.includes('gmail.readonly') || s.includes('gmail.send'))) {
               newUser.gmailAccessToken = accessToken;
               newUser.gmailRefreshToken = refreshToken;
               newUser.gmailGrantedScopes = grantedScopes;
+              newUser.googleconnectmail = profile.emails[0].value;
             }
 
             return usersCollection.insertOne(newUser)
               .then(function (result) {
                 return usersCollection.findOne({ _id: result.insertedId });
               });
-          } else {
+          } else if (user) {
             var updateData = {
-              googleId: profile.id,
-              accessToken: accessToken,
-              refreshToken: refreshToken,
-              gmailGrantedScopes: grantedScopes,
               updatedAt: new Date()
             };
 
-            // Check for Gmail specific scope
-            if (grantedScopes.some(s => s.includes('gmail.readonly'))) {
+            // If linking, only update Google-specific fields
+            if (userIdToLink) {
+              updateData.googleconnectmail = profile.emails[0].value;
               updateData.gmailAccessToken = accessToken;
-              updateData.gmailRefreshToken = refreshToken;
+              updateData.gmailRefreshToken = refreshToken || user.gmailRefreshToken;
               updateData.gmailGrantedScopes = grantedScopes;
+            } else {
+              updateData.googleId = profile.id;
+              updateData.accessToken = accessToken;
+              if (refreshToken) updateData.refreshToken = refreshToken;
+              updateData.gmailGrantedScopes = grantedScopes;
+            }
+
+            // Check for Gmail specific scope
+            if (grantedScopes.some(s => s.includes('gmail.readonly') || s.includes('gmail.send'))) {
+              updateData.gmailAccessToken = accessToken;
+              if (refreshToken) updateData.gmailRefreshToken = refreshToken;
+              updateData.gmailGrantedScopes = grantedScopes;
+              updateData.googleconnectmail = profile.emails[0].value;
             }
 
             return usersCollection.updateOne(
@@ -127,12 +147,15 @@ passport.use(
             ).then(function () {
               return Object.assign({}, user, updateData);
             });
+          } else {
+            throw new Error('User not found to link');
           }
         })
         .then(function (user) {
           done(null, user);
         })
         .catch(function (err) {
+          console.error('Google Auth Error:', err);
           done(err, null);
         });
     }
@@ -192,8 +215,8 @@ router.get(
 
 router.get('/microsoft', microsoftAuth);
 router.get('/microsoft/callback', microsoftCallback);
-router.post('/microsoft/custom', microsoftCustomAuth);
-router.post('/google/custom', googleCustomAuth);
+router.post('/microsoft/custom', authMiddleware.verifyToken, microsoftCustomAuth);
+router.post('/google/custom', authMiddleware.verifyToken, googleCustomAuth);
 
 router.get('/google/callback', function (req, res, next) {
   passport.authenticate('google', { session: false }, function (err, user) {

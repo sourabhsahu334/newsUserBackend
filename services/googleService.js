@@ -13,18 +13,24 @@ const getOAuth2Client = (user) => {
   return oAuth2Client;
 };
 
-const getGoogleAuthUrl = (scopes) => {
+const getGoogleAuthUrl = (scopes, state) => {
   const oAuth2Client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
     process.env.GOOGLE_CALLBACK_URL || 'https://www.neukaps.com/auth/google/callback'
   );
 
-  return oAuth2Client.generateAuthUrl({
+  const authOptions = {
     access_type: 'offline',
     scope: scopes || ['profile', 'email'],
     prompt: 'consent'
-  });
+  };
+
+  if (state) {
+    authOptions.state = state;
+  }
+
+  return oAuth2Client.generateAuthUrl(authOptions);
 };
 
 export { getOAuth2Client, getGoogleAuthUrl };
