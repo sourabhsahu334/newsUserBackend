@@ -763,7 +763,7 @@ router.post('/create-folder',
       if (folderExists) {
         return res.status(405).json({
           success: false,
-          message: 'folder already exist with this name'
+          message: 'folder already exist'
         });
       }
 
