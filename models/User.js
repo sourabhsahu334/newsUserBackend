@@ -45,6 +45,8 @@ const userSchema = new mongoose.Schema({
   activeColumn: {
     type: [String],
     default: [
+      "name",
+      "email",
       "fit_status",
       "current_company",
       "mobile",

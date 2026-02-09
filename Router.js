@@ -771,6 +771,8 @@ router.post('/create-folder',
         foldername: trimmedFolderName,
         JD: jd || "",
         activeColumn: [
+          "name",
+          "email",
           "fit_status",
           "current_company",
           "mobile",
