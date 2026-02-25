@@ -394,7 +394,6 @@ const transporter = nodemailer.createTransport({
 
 // Store OTPs in database
 const otpCollection = client.db('Interest').collection('otps');
-
 // Generate 6-digit OTP
 function generateOTP() {
   return crypto.randomInt(100000, 999999).toString();

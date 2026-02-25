@@ -46,7 +46,7 @@ app.use('/st', routes);
 app.use('/auth', googleroutes);
 app.use('/payment', paymentroutes);
 app.get('/', (req, res) => {
-  res.send('Welcome to the Express API! webhook updated33');
+  res.send('Welcome to the Express API');
 });
 
 
